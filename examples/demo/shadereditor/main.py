@@ -1,3 +1,20 @@
+'''
+Live Shader Editor
+==================
+
+This provides a live editor for vertex and fragment editors.
+You should see a window with two editable panes on the left
+and a large kivy logo on the right.The top pane is the
+Vertex shader and the bottom is the Fragment shader. The file shadereditor.kv
+describes the interface.
+
+On each keystroke to either shader, declarations are added and the shaders
+are compiled. If there are no errors, the screen is updated. Otherwise,
+the error is visible as logging message in your terminal.
+'''
+
+
+import sys
 import kivy
 kivy.require('1.0.6')
 
@@ -45,6 +62,7 @@ uniform mat4       projection_mat;
 uniform vec4       color;
 '''
 
+
 class ShaderViewer(FloatLayout):
     fs = StringProperty(None)
     vs = StringProperty(None)
@@ -58,7 +76,7 @@ class ShaderViewer(FloatLayout):
         s = self.canvas
         s['projection_mat'] = Window.render_context['projection_mat']
         s['time'] = Clock.get_boottime()
-        s['resolution'] = map(float, self.size)
+        s['resolution'] = list(map(float, self.size))
         s.ask_update()
 
     def on_fs(self, instance, value):
@@ -69,7 +87,10 @@ class ShaderViewer(FloatLayout):
 
 Factory.register('ShaderViewer', cls=ShaderViewer)
 
+
 class ShaderEditor(FloatLayout):
+
+    source = StringProperty('data/logo/kivy-icon-512.png')
 
     fs = StringProperty('''
 void main (void){
@@ -94,19 +115,23 @@ void main (void) {
         self.bind(fs=self.trigger_compile, vs=self.trigger_compile)
 
     def compile_shaders(self, *largs):
-        print 'try compile'
+        print('try compile')
         if not self.viewer:
             return
         fs = fs_header + self.fs
         vs = vs_header + self.vs
-        print '-->', fs
+        print('-->', fs)
         self.viewer.fs = fs
-        print '-->', vs
+        print('-->', vs)
         self.viewer.vs = vs
+
 
 class ShaderEditorApp(App):
     def build(self):
-        return ShaderEditor()
+        kwargs = {}
+        if len(sys.argv) > 1:
+            kwargs['source'] = sys.argv[1]
+        return ShaderEditor(**kwargs)
 
 if __name__ == '__main__':
     ShaderEditorApp().run()

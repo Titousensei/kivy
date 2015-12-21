@@ -7,8 +7,11 @@ Packaging your application
     :maxdepth: 2
 
     packaging-windows
-    packaging-macosx
     packaging-android
-    packaging-ios
-
+    packaging-android-vm
     android
+    packaging-osx
+    packaging-ios
+    packaging-ios-prerequisites
+    packaging-ios-compile
+

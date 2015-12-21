@@ -1,14 +1,14 @@
 '''
-Native support of Multitouch device on Linux, using libmtdev.
-=============================================================
+Native support for Multitouch devices on Linux, using libmtdev.
+===============================================================
 
-Mtdev project is a part of Ubuntu Maverick multitouch architecture.
+The Mtdev project is a part of the Ubuntu Maverick multitouch architecture.
 You can read more on http://wiki.ubuntu.com/Multitouch
 
 To configure MTDev, it's preferable to use probesysfs providers.
 Check :py:class:`~kivy.input.providers.probesysfs` for more information.
 
-Otherwise, you can put in your configuration::
+Otherwise, add this to your configuration::
 
     [input]
     # devicename = hidinput,/dev/input/eventXX
@@ -17,9 +17,9 @@ Otherwise, you can put in your configuration::
 .. note::
     You must have read access to the input event.
 
-You have the possibility to use custom range for some X, Y and pressure value.
+You can use a custom range for the X, Y and pressure values.
 On some drivers, the range reported is invalid.
-To fix that, you can add one of theses options on the argument line :
+To fix that, you can add these options to the argument line:
 
 * invert_x : 1 to invert X axis
 * invert_y : 1 to invert Y axis
@@ -33,6 +33,7 @@ To fix that, you can add one of theses options on the argument line :
 * max_touch_major : width shape maximum
 * min_touch_minor : width shape minimum
 * max_touch_minor : height shape maximum
+* rotation : 0,90,180 or 270 to rotate
 '''
 
 __all__ = ('MTDMotionEventProvider', 'MTDMotionEvent')
@@ -72,12 +73,12 @@ else:
     import threading
     import collections
     from kivy.lib.mtdev import Device, \
-            MTDEV_TYPE_EV_ABS, MTDEV_CODE_SLOT, MTDEV_CODE_POSITION_X, \
-            MTDEV_CODE_POSITION_Y, MTDEV_CODE_PRESSURE, \
-            MTDEV_CODE_TOUCH_MAJOR, MTDEV_CODE_TOUCH_MINOR, \
-            MTDEV_CODE_TRACKING_ID, MTDEV_ABS_POSITION_X, \
-            MTDEV_ABS_POSITION_Y, MTDEV_ABS_TOUCH_MINOR, \
-            MTDEV_ABS_TOUCH_MAJOR
+        MTDEV_TYPE_EV_ABS, MTDEV_CODE_SLOT, MTDEV_CODE_POSITION_X, \
+        MTDEV_CODE_POSITION_Y, MTDEV_CODE_PRESSURE, \
+        MTDEV_CODE_TOUCH_MAJOR, MTDEV_CODE_TOUCH_MINOR, \
+        MTDEV_CODE_TRACKING_ID, MTDEV_ABS_POSITION_X, \
+        MTDEV_ABS_POSITION_Y, MTDEV_ABS_TOUCH_MINOR, \
+        MTDEV_ABS_TOUCH_MAJOR
     from kivy.input.provider import MotionEventProvider
     from kivy.input.factory import MotionEventFactory
     from kivy.logger import Logger
@@ -89,7 +90,8 @@ else:
                    'min_pressure', 'max_pressure',
                    'min_touch_major', 'max_touch_major',
                    'min_touch_minor', 'min_touch_major',
-                   'invert_x', 'invert_y')
+                   'invert_x', 'invert_y',
+                   'rotation')
 
         def __init__(self, device, args):
             super(MTDMotionEventProvider, self).__init__(device, args)
@@ -116,8 +118,9 @@ else:
 
                 # ensure it's a key = value
                 if len(arg) != 2:
-                    err = 'MTD: Bad parameter %s: Not in key=value format' % arg
-                    Logger.error()
+                    err = 'MTD: Bad parameter %s: Not in key=value format' %\
+                        arg
+                    Logger.error(err)
                     continue
 
                 # ensure the key exist
@@ -136,6 +139,13 @@ else:
 
                 # all good!
                 Logger.info('MTD: Set custom %s to %d' % (key, int(value)))
+
+            if 'rotation' not in self.default_ranges:
+                self.default_ranges['rotation'] = 0
+            elif self.default_ranges['rotation'] not in (0, 90, 180, 270):
+                Logger.error('HIDInput: invalid rotation value ({})'.format(
+                    self.default_ranges['rotation']))
+                self.default_ranges['rotation'] = 0
 
         def start(self):
             if self.input_fn is None:
@@ -162,8 +172,25 @@ else:
             point = {}
             l_points = {}
 
+            def assign_coord(point, value, invert, coords):
+                cx, cy = coords
+                if invert:
+                    value = 1. - value
+                if rotation == 0:
+                    point[cx] = value
+                elif rotation == 90:
+                    point[cy] = value
+                elif rotation == 180:
+                    point[cx] = 1. - value
+                elif rotation == 270:
+                    point[cy] = 1. - value
+
             def process(points):
                 for args in points:
+                    # this can happen if we have a touch going on already at the
+                    # start of the app
+                    if 'id' not in args:
+                        continue
                     tid = args['id']
                     try:
                         touch = touches[tid]
@@ -227,6 +254,10 @@ else:
             Logger.info('MTD: <%s> axes invertion: X is %d, Y is %d' %
                         (_fn, invert_x, invert_y))
 
+            rotation = drs('rotation', 0)
+            Logger.info('MTD: <%s> rotation set to %d' %
+                        (_fn, rotation))
+
             while _device:
                 # idle as much as we can.
                 while _device.idle(1000):
@@ -252,28 +283,35 @@ else:
                     ev_code = data.code
                     if ev_code == MTDEV_CODE_POSITION_X:
                         val = normalize(ev_value,
-                            range_min_position_x, range_max_position_x)
-                        if invert_x:
-                            val = 1. - val
-                        point['x'] = val
+                                        range_min_position_x,
+                                        range_max_position_x)
+                        assign_coord(point, val, invert_x, 'xy')
                     elif ev_code == MTDEV_CODE_POSITION_Y:
                         val = 1. - normalize(ev_value,
-                            range_min_position_y, range_max_position_y)
-                        if invert_y:
-                            val = 1. - val
-                        point['y'] = val
+                                             range_min_position_y,
+                                             range_max_position_y)
+                        assign_coord(point, val, invert_y, 'yx')
                     elif ev_code == MTDEV_CODE_PRESSURE:
                         point['pressure'] = normalize(ev_value,
-                            range_min_pressure, range_max_pressure)
+                                                      range_min_pressure,
+                                                      range_max_pressure)
                     elif ev_code == MTDEV_CODE_TOUCH_MAJOR:
                         point['size_w'] = normalize(ev_value,
-                            range_min_major, range_max_major)
+                                                    range_min_major,
+                                                    range_max_major)
                     elif ev_code == MTDEV_CODE_TOUCH_MINOR:
                         point['size_h'] = normalize(ev_value,
-                            range_min_minor, range_max_minor)
+                                                    range_min_minor,
+                                                    range_max_minor)
                     elif ev_code == MTDEV_CODE_TRACKING_ID:
                         if ev_value == -1:
                             point['delete'] = True
+                            # force process of changes here, as the slot can be
+                            # reused.
+                            _changes.add(_slot)
+                            process([l_points[x] for x in _changes])
+                            _changes.clear()
+                            continue
                         else:
                             point['id'] = ev_value
                     else:

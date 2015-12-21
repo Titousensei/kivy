@@ -23,18 +23,18 @@ __all__ = ('ClearColor', 'ClearBuffers')
 include "config.pxi"
 include "opcodes.pxi"
 
-from c_opengl cimport *
+from kivy.graphics.c_opengl cimport *
 IF USE_OPENGL_DEBUG == 1:
     from c_opengl_debug cimport *
-from instructions cimport Instruction
+from kivy.graphics.instructions cimport Instruction
 
 
 cdef class ClearColor(Instruction):
-    ''' ClearColor Graphic Instruction.
+    ''' ClearColor Graphics Instruction.
 
     .. versionadded:: 1.3.0
 
-    Sets the clear color used to clear buffers with glClear function, or
+    Sets the clear color used to clear buffers with the glClear function or
     :class:`ClearBuffers` graphics instructions.
     '''
 
@@ -50,16 +50,18 @@ cdef class ClearColor(Instruction):
         self.b = b
         self.a = a
 
-    cdef void apply(self):
+    cdef int apply(self) except -1:
         glClearColor(self.r, self.g, self.b, self.a)
+        return 0
 
     property rgba:
-        '''RGBA used for clear color, list of 4 values in 0-1 range
+        '''RGBA color used for the clear color, a list of 4 values in the 0-1
+        range.
         '''
         def __get__(self):
             return [self.r, self.b, self.g, self.a]
         def __set__(self, rgba):
-            cdef list clear_color =  map(float, rgba)
+            cdef list clear_color = [float(x) for x in rgba]
             self.r = clear_color[0]
             self.g = clear_color[1]
             self.b = clear_color[2]
@@ -67,12 +69,12 @@ cdef class ClearColor(Instruction):
             self.flag_update()
 
     property rgb:
-        '''RGB color, list of 3 values in 0-1 range, alpha will be 1.
+        '''RGB color, a list of 3 values in 0-1 range where alpha will be 1.
         '''
         def __get__(self):
             return [self.r, self.g, self.b]
         def __set__(self, rgb):
-            cdef list clear_color =  map(float, rgb)
+            cdef list clear_color = [float(x) for x in rgb]
             self.r = clear_color[0]
             self.g = clear_color[1]
             self.b = clear_color[2]
@@ -80,7 +82,7 @@ cdef class ClearColor(Instruction):
             self.flag_update()
 
     property r:
-        '''Red component, between 0-1
+        '''Red component, between 0 and 1.
         '''
         def __get__(self):
             return self.r
@@ -89,7 +91,7 @@ cdef class ClearColor(Instruction):
             self.flag_update()
 
     property g:
-        '''Green component, between 0-1
+        '''Green component, between 0 and 1.
         '''
         def __get__(self):
             return self.g
@@ -98,7 +100,7 @@ cdef class ClearColor(Instruction):
             self.flag_update()
 
     property b:
-        '''Blue component, between 0-1
+        '''Blue component, between 0 and 1.
         '''
         def __get__(self):
             return self.b
@@ -107,7 +109,7 @@ cdef class ClearColor(Instruction):
             self.flag_update()
 
     property a:
-        '''Alpha component, between 0-1
+        '''Alpha component, between 0 and 1.
         '''
         def __get__(self):
             return self.a
@@ -117,7 +119,7 @@ cdef class ClearColor(Instruction):
 
 
 cdef class ClearBuffers(Instruction):
-    ''' Clearbuffer Graphic Instruction
+    ''' Clearbuffer Graphics Instruction.
 
     .. versionadded:: 1.3.0
 
@@ -131,11 +133,11 @@ cdef class ClearBuffers(Instruction):
 
     def __init__(self, *args, **kwargs):
         Instruction.__init__(self, *args, **kwargs)
-        self.clear_color = 1
-        self.clear_stencil = 0
-        self.clear_depth = 0
+        self.clear_color = int(kwargs.get('clear_color', 1))
+        self.clear_stencil = int(kwargs.get('clear_stencil', 0))
+        self.clear_depth = int(kwargs.get('clear_depth', 0))
 
-    cdef void apply(self):
+    cdef int apply(self) except -1:
         cdef GLbitfield mask = 0
         if self.clear_color:
             mask |= GL_COLOR_BUFFER_BIT
@@ -144,9 +146,10 @@ cdef class ClearBuffers(Instruction):
         if self.clear_depth:
             mask |= GL_DEPTH_BUFFER_BIT
         glClear(mask)
-
+        return 0
+        
     property clear_color:
-        '''If true, the color buffer will be cleared
+        '''If True, the color buffer will be cleared.
         '''
         def __get__(self):
             return self.clear_color
@@ -157,7 +160,7 @@ cdef class ClearBuffers(Instruction):
             self.clear_color = value
 
     property clear_stencil:
-        '''If true, the stencil buffer will be cleared
+        '''If True, the stencil buffer will be cleared.
         '''
         def __get__(self):
             return self.clear_stencil
@@ -168,7 +171,7 @@ cdef class ClearBuffers(Instruction):
             self.clear_stencil = value
 
     property clear_depth:
-        '''If true, the depth buffer will be cleared
+        '''If True, the depth buffer will be cleared.
         '''
         def __get__(self):
             return self.clear_depth

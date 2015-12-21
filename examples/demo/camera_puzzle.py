@@ -1,3 +1,15 @@
+'''
+Shuffled Camera Feed Puzzle
+===========================
+
+This demonstrates using Scatter widgets with a live camera.
+You should see a shuffled grid of rectangles that make up the
+camera feed. You can drag the squares around to see the
+unscrambled camera feed or double click to scramble the grid
+again.
+'''
+
+
 from kivy.app import App
 from kivy.uix.camera import Camera
 from kivy.uix.widget import Widget
@@ -9,12 +21,14 @@ from kivy.properties import NumericProperty
 from random import randint, random
 from functools import partial
 
+
 class Puzzle(Camera):
 
     blocksize = NumericProperty(100)
 
     def on_texture_size(self, instance, value):
         self.build()
+
     def on_blocksize(self, instance, value):
         self.build()
 
@@ -25,12 +39,13 @@ class Puzzle(Camera):
             return
         bs = self.blocksize
         tw, th = self.texture_size
-        for x in xrange(int(tw / bs)):
-            for y in xrange(int(th / bs)):
+        for x in range(int(tw / bs)):
+            for y in range(int(th / bs)):
                 bx = x * bs
                 by = y * bs
                 subtexture = texture.get_region(bx, by, bs, bs)
-                #node = PuzzleNode(texture=subtexture, size=(bs, bs), pos=(bx, by))
+                #node = PuzzleNode(texture=subtexture,
+                #                  size=(bs, bs), pos=(bx, by))
                 node = Scatter(pos=(bx, by), size=(bs, bs))
                 with node.canvas:
                     Color(1, 1, 1)
@@ -44,14 +59,15 @@ class Puzzle(Camera):
         bs = self.blocksize
         tw, th = self.texture_size
         count = int(tw / bs) * int(th / bs)
-        indices = range(count)
+        indices = list(range(count))
         childindex = 0
         while indices:
             index = indices.pop(randint(0, len(indices) - 1))
             x = bs * (index % int(tw / bs))
             y = bs * int(index / int(tw / bs))
             child = self.children[childindex]
-            a = Animation(d=random() / 4.) + Animation(pos=(x, y), t='out_quad', d=.4)
+            a = Animation(d=random() / 4.) + Animation(pos=(x, y),
+                                                       t='out_quad', d=.4)
             a.start(child)
             childindex += 1
 
@@ -77,7 +93,5 @@ class PuzzleApp(App):
         value = int((value + 5) / 10) * 10
         puzzle.blocksize = value
         instance.value = value
-
-
 
 PuzzleApp().run()

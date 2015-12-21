@@ -29,7 +29,7 @@
     Thanks for the support to Buchsenhausen, Innsbruck, Austria.
 '''
 
-import OSC
+from . import OSC
 import socket, os, time, errno, sys
 from threading import Lock
 from kivy.logger import Logger
@@ -43,6 +43,7 @@ try:
     Logger.info('OSC: using <multiprocessing> for socket')
 except:
     use_multiprocessing = False
+    from collections import deque
     from threading import Thread
     Logger.info('OSC: using <thread> for socket')
 
@@ -54,17 +55,13 @@ oscLock        = Lock()
 if use_multiprocessing:
     def _readQueue(thread_id=None):
         global oscThreads
-        for id in oscThreads:
-            if thread_id is not None:
-                if id != thread_id:
-                    continue
-            thread = oscThreads[id]
-            try:
-                while True:
-                    message = thread.queue.get_nowait()
-                    thread.addressManager.handle(message)
-            except:
-                pass
+        thread = oscThreads[thread_id]
+        try:
+            while True:
+                message = thread.queue.get_nowait()
+                thread.addressManager.handle(message)
+        except:
+            pass
 
     class _OSCServer(Process):
         def __init__(self, **kwargs):
@@ -80,35 +77,45 @@ if use_multiprocessing:
 
         def _get_isRunning(self):
             return self._isRunning.value
+
         def _set_isRunning(self, value):
             self._isRunning.value = value
         isRunning = property(_get_isRunning, _set_isRunning)
 
         def _get_haveSocket(self):
             return self._haveSocket.value
+
         def _set_haveSocket(self, value):
             self._haveSocket.value = value
         haveSocket = property(_get_haveSocket, _set_haveSocket)
 else:
     def _readQueue(thread_id=None):
-        pass
+        thread = oscThreads[thread_id]
+
+        q = thread.queue
+        h = thread.addressManager.handle
+
+        while q:
+            h(q.popleft())
 
     class _OSCServer(Thread):
         def __init__(self, **kwargs):
             Thread.__init__(self)
             self.addressManager = OSC.CallbackManager()
-            self.daemon     = True
-            self.isRunning  = True
+            self.queue = deque()
+            self.daemon = True
+            self.isRunning = True
             self.haveSocket = False
 
         def _queue_message(self, message):
-            self.addressManager.handle(message)
+            self.queue.append(message)
 
 
 def init() :
     '''instantiates address manager and outsocket as globals
     '''
-    assert('Not used anymore')
+    global outSocket
+    outSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
 def bind(oscid, func, oscaddress):
@@ -121,12 +128,12 @@ def bind(oscid, func, oscaddress):
     thread.addressManager.add(func, oscaddress)
 
 
-def sendMsg(oscAddress, dataArray=[], ipAddr='127.0.0.1', port=9000) :
+def sendMsg(oscAddress, dataArray=[], ipAddr='127.0.0.1', port=9000, typehint=None) :
     '''create and send normal OSC msgs
         defaults to '127.0.0.1', port 9000
     '''
     oscLock.acquire()
-    outSocket.sendto( createBinaryMsg(oscAddress, dataArray),  (ipAddr, port))
+    outSocket.sendto( createBinaryMsg(oscAddress, dataArray, typehint),  (ipAddr, port))
     oscLock.release()
 
 
@@ -155,14 +162,14 @@ def sendBundle(bundle, ipAddr='127.0.0.1', port=9000) :
     oscLock.release()
 
 
-def createBinaryMsg(oscAddress, dataArray):
+def createBinaryMsg(oscAddress, dataArray, typehint=None):
     '''create and return general type binary OSC msg
     '''
     m = OSC.OSCMessage()
     m.address = oscAddress
 
     for x in dataArray:
-        m.append(x)
+        m.append(x, typehint)
 
     return m.getBinary()
 
@@ -203,15 +210,14 @@ class OSCServer(_OSCServer):
                 self.socket.settimeout(0.5)
                 self.haveSocket = True
 
-            except socket.error, e:
+            except socket.error as e:
                 error, message = e.args
 
                 # special handle for EADDRINUSE
                 if error == errno.EADDRINUSE:
                     Logger.error('OSC: Address %s:%i already in use, retry in 2 second' % (self.ipAddr, self.port))
                 else:
-                    Logger.exception(e)
-                self.haveSocket = False
+                    self.haveSocket = False
 
                 # sleep 2 second before retry
                 time.sleep(2)
@@ -222,11 +228,10 @@ class OSCServer(_OSCServer):
             try:
                 message = self.socket.recv(65535)
                 self._queue_message(message)
-            except Exception, e:
+            except Exception as e:
                 if type(e) == socket.timeout:
                     continue
-                Logger.error('OSC: Error in Tuio recv()')
-                Logger.exception(e)
+                Logger.exception('OSC: Error in Tuio recv()')
                 return 'no data arrived'
 
 def listen(ipAddr='127.0.0.1', port=9001):
@@ -234,46 +239,46 @@ def listen(ipAddr='127.0.0.1', port=9001):
     defaults to ipAddr='127.0.0.1', port 9001
     '''
     global oscThreads
-    id = '%s:%d' % (ipAddr, port)
-    if id in oscThreads:
+    thread_id = '%s:%d' % (ipAddr, port)
+    if thread_id in oscThreads:
         return
-    Logger.debug('OSC: Start thread <%s>' % id)
-    oscThreads[id] = OSCServer(ipAddr=ipAddr, port=port)
-    oscThreads[id].start()
-    return id
+    Logger.debug('OSC: Start thread <%s>' % thread_id)
+    oscThreads[thread_id] = OSCServer(ipAddr=ipAddr, port=port)
+    oscThreads[thread_id].start()
+    return thread_id
 
 
-def dontListen(id = None):
+def dontListen(thread_id = None):
     '''closes the socket and kills the thread
     '''
     global oscThreads
-    if id and id in oscThreads:
-        ids = [id]
+    if thread_id and thread_id in oscThreads:
+        ids = [thread_id]
     else:
-        ids = oscThreads.keys()
-    for id in ids:
-        #oscThreads[id].socket.close()
-        Logger.debug('OSC: Stop thread <%s>' % id)
-        oscThreads[id].isRunning = False
-        oscThreads[id].join()
-        Logger.debug('OSC: Stop thread <%s> finished' % id)
-        del oscThreads[id]
+        ids = list(oscThreads.keys())
+    for thread_id in ids:
+        #oscThreads[thread_id].socket.close()
+        Logger.debug('OSC: Stop thread <%s>' % thread_id)
+        oscThreads[thread_id].isRunning = False
+        oscThreads[thread_id].join()
+        Logger.debug('OSC: Stop thread <%s> finished' % thread_id)
+        del oscThreads[thread_id]
 
 if __name__ == '__main__':
     # example of how to use oscAPI
     init()
-    listen() # defaults to "127.0.0.1", 9001
+    oscid = listen() # defaults to "127.0.0.1", 9001
     time.sleep(5)
 
     # add addresses to callback manager
     def printStuff(msg):
         '''deals with "print" tagged OSC addresses
         '''
-        print "printing in the printStuff function ", msg
-        print "the oscaddress is ", msg[0]
-        print "the value is ", msg[2]
+        print("printing in the printStuff function ", msg)
+        print("the oscaddress is ", msg[0])
+        print("the value is ", msg[2])
 
-    bind(printStuff, "/test")
+    bind(oscid, printStuff, "/test")
 
     #send normal msg, two ways
     sendMsg("/test", [1, 2, 3], "127.0.0.1", 9000)

@@ -2,12 +2,12 @@
 Framebuffer
 ===========
 
-Fbo is like an offscreen window. You can activate the fbo for rendering into a
-texture, and use your fbo as a texture for another drawing.
+The Fbo is like an offscreen window. You can activate the fbo for rendering into
+a texture and use your fbo as a texture for other drawing.
 
-Fbo act as a :class:`kivy.graphics.instructions.Canvas`.
+The Fbo acts as a :class:`kivy.graphics.instructions.Canvas`.
 
-Example of using an fbo for some color rectangles::
+Here is an example of using an fbo for some colored rectangles::
 
     from kivy.graphics import Fbo, Color, Rectangle
 
@@ -35,8 +35,8 @@ Example of using an fbo for some color rectangles::
                 Color(0, 1, 0, .8)
                 Rectangle(size=(64, 256))
 
-If you change anything in the `self.fbo` object, it will be automaticly updated,
-and canvas where the fbo is putted will be automaticly updated too.
+If you change anything in the `self.fbo` object, it will be automatically updated.
+The canvas where the fbo is put will be automatically updated as well.
 
 Reloading the FBO content
 -------------------------
@@ -44,7 +44,7 @@ Reloading the FBO content
 .. versionadded:: 1.2.0
 
 If the OpenGL context is lost, then the FBO is lost too. You need to reupload
-data on it yourself. Use the :func:`Fbo.add_reload_observer` to add a reloading
+data on it yourself. Use the :meth:`Fbo.add_reload_observer` to add a reloading
 function that will be automatically called when needed::
 
     def __init__(self, **kwargs):
@@ -81,8 +81,9 @@ from kivy.graphics.c_opengl cimport *
 IF USE_OPENGL_DEBUG == 1:
     from kivy.graphics.c_opengl_debug cimport *
 from kivy.graphics.instructions cimport RenderContext, Canvas
+from kivy.graphics.opengl import glReadPixels as py_glReadPixels
 
-cdef list fbo_stack = [0]
+cdef list fbo_stack = []
 cdef list fbo_release_list = []
 
 
@@ -91,17 +92,26 @@ cdef class Fbo(RenderContext):
     "with" statement.
 
     :Parameters:
-        `clear_color`: tuple, default to (0, 0, 0, 0)
+        `clear_color`: tuple, defaults to (0, 0, 0, 0)
             Define the default color for clearing the framebuffer
-        `size`: tuple, default to (1024, 1024)
+        `size`: tuple, defaults to (1024, 1024)
             Default size of the framebuffer
-        `push_viewport`: bool, default to True
+        `push_viewport`: bool, defaults to True
             If True, the OpenGL viewport will be set to the framebuffer size,
             and will be automatically restored when the framebuffer released.
-        `with_depthbuffer`: bool, default to False
+        `with_depthbuffer`: bool, defaults to False
             If True, the framebuffer will be allocated with a Z buffer.
-        `texture`: :class:`~kivy.graphics.texture.Texture`, default to None
+        `with_stencilbuffer`: bool, defaults to False
+            .. versionadded:: 1.9.0
+
+            If True, the framebuffer will be allocated with a stencil buffer.
+        `texture`: :class:`~kivy.graphics.texture.Texture`, defaults to None
             If None, a default texture will be created.
+
+    .. note::
+        Using both of ``with_stencilbuffer`` and ``with_depthbuffer`` is not
+        supported in kivy 1.9.0
+
     '''
     cdef str resolve_status(self, int status):
         if status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
@@ -145,18 +155,25 @@ cdef class Fbo(RenderContext):
             kwargs['push_viewport'] = True
         if 'with_depthbuffer' not in kwargs:
             kwargs['with_depthbuffer'] = False
+        if 'with_stencilbuffer' not in kwargs:
+            kwargs['with_stencilbuffer'] = False
         if 'texture' not in kwargs:
             kwargs['texture'] = None
 
-        self.buffer_id = -1
-        self.depthbuffer_id = -1
+        self.buffer_id = 0
+        self.depthbuffer_id = 0
+        self.stencilbuffer_id = 0
         self._width, self._height  = kwargs['size']
         self.clear_color = kwargs['clear_color']
         self._depthbuffer_attached = int(kwargs['with_depthbuffer'])
+        self._stencilbuffer_attached = int(kwargs['with_stencilbuffer'])
         self._push_viewport = int(kwargs['push_viewport'])
         self._is_bound = 0
         self._texture = kwargs['texture']
         self.observers = []
+
+        if self._depthbuffer_attached and self._stencilbuffer_attached:
+            Logger.warning('Fbo: depth+stencil buffer support is experimental')
 
         self.create_fbo()
 
@@ -166,11 +183,12 @@ cdef class Fbo(RenderContext):
     cdef void delete_fbo(self):
         self._texture = None
         get_context().dealloc_fbo(self)
-        self.buffer_id = -1
-        self.depthbuffer_id = -1
+        self.buffer_id = 0
+        self.depthbuffer_id = 0
 
     cdef void create_fbo(self):
         cdef GLuint f_id = 0
+        cdef GLint old_fid = 0
         cdef int status
         cdef int do_clear = 0
 
@@ -179,21 +197,49 @@ cdef class Fbo(RenderContext):
             self._texture = Texture.create(size=(self._width, self._height))
             do_clear = 1
 
+        # apply any changes if needed
+        self._texture.bind()
+
         # create framebuffer
         glGenFramebuffers(1, &f_id)
         self.buffer_id = f_id
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fid)
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer_id)
 
+        # experimental depth+stencil renderbuffer
+        if self._depthbuffer_attached and self._stencilbuffer_attached:
+            glGenRenderbuffers(1, &f_id)
+            self.depthbuffer_id = self.stencilbuffer_id = f_id
+            glBindRenderbuffer(GL_RENDERBUFFER, f_id)
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
+                                  self._width, self._height)
+            glBindRenderbuffer(GL_RENDERBUFFER, 0)
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                      GL_RENDERBUFFER, f_id)
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
+                                      GL_RENDERBUFFER, f_id)
+
         # if we need depth, create a renderbuffer
-        if self._depthbuffer_attached:
+        elif self._depthbuffer_attached:
             glGenRenderbuffers(1, &f_id)
             self.depthbuffer_id = f_id
             glBindRenderbuffer(GL_RENDERBUFFER, self.depthbuffer_id)
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT,
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16,
                                   self._width, self._height)
             glBindRenderbuffer(GL_RENDERBUFFER, 0)
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                                       GL_RENDERBUFFER, self.depthbuffer_id)
+
+        # if we need stencil, create a renderbuffer
+        elif self._stencilbuffer_attached:
+            glGenRenderbuffers(1, &f_id)
+            self.stencilbuffer_id = f_id
+            glBindRenderbuffer(GL_RENDERBUFFER, self.stencilbuffer_id)
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8,
+                                  self._width, self._height)
+            glBindRenderbuffer(GL_RENDERBUFFER, 0)
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
+                                      GL_RENDERBUFFER, self.stencilbuffer_id)
 
         # attach the framebuffer to our texture
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -201,6 +247,17 @@ cdef class Fbo(RenderContext):
 
         # check the status of the framebuffer
         status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
+
+        if (status == GL_FRAMEBUFFER_UNSUPPORTED and
+                (self._stencilbuffer_attached ^ self._depthbuffer_attached)):
+            # attempt to automatically fall back to a depth+stencil buffer
+            Logger.warning('Fbo: unsupported mode; ' +
+                           'attempting to create depth+stencil buffer instead')
+            self._stencilbuffer_attached = self._depthbuffer_attached = True
+            glBindFramebuffer(GL_FRAMEBUFFER, old_fid)
+            self.create_fbo()
+            return
+
         if status != GL_FRAMEBUFFER_COMPLETE:
             self.raise_exception('FBO Initialization failed', status)
 
@@ -209,7 +266,7 @@ cdef class Fbo(RenderContext):
             self.clear_buffer()
 
         # unbind the framebuffer
-        glBindFramebuffer(GL_FRAMEBUFFER, 0)
+        glBindFramebuffer(GL_FRAMEBUFFER, old_fid)
 
         cdef Matrix projection_mat = Matrix()
         projection_mat.view_clip(0.0, self._width, 0.0, self._height, -1.0, 1.0, 0)
@@ -218,12 +275,12 @@ cdef class Fbo(RenderContext):
     cpdef bind(self):
         '''Bind the FBO to the current opengl context.
         `Bind` mean that you enable the Framebuffer, and all the drawing
-        operations will act inside the Framebuffer, until :func:`release` is
+        operations will act inside the Framebuffer, until :meth:`release` is
         called.
 
-        The bind/release operation are automatically done when you add graphics
-        object in it. But if you want to manipulate a Framebuffer yourself, you
-        can use it like this::
+        The bind/release operations are automatically called when you add
+        graphics objects into it. If you want to manipulate a Framebuffer
+        yourself, you can use it like this::
 
             self.fbo = FBO()
             self.fbo.bind()
@@ -231,7 +288,7 @@ cdef class Fbo(RenderContext):
             self.fbo.release()
 
             # then, your fbo texture is available at
-            print self.fbo.texture
+            print(self.fbo.texture)
         '''
         if self._is_bound:
             self.raise_exception('FBO already binded.')
@@ -239,6 +296,12 @@ cdef class Fbo(RenderContext):
             self._is_bound = 1
 
         # stack our fbo to the last binded fbo
+        cdef GLint old_fid = 0
+        if len(fbo_stack) == 0:
+            # the very first time we're going to create it, fill with the
+            # initial framebuffer
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fid)
+            fbo_stack.append(old_fid)
         fbo_stack.append(self.buffer_id)
         glBindFramebuffer(GL_FRAMEBUFFER, self.buffer_id)
 
@@ -265,9 +328,9 @@ cdef class Fbo(RenderContext):
                        self._viewport[2], self._viewport[3])
 
     cpdef clear_buffer(self):
-        '''Clear the framebuffer with the :data:`clear_color`.
+        '''Clear the framebuffer with the :attr:`clear_color`.
 
-        You need to bound the framebuffer yourself before calling this
+        You need to bind the framebuffer yourself before calling this
         method::
 
             fbo.bind()
@@ -277,17 +340,23 @@ cdef class Fbo(RenderContext):
         '''
         glClearColor(self._clear_color[0], self._clear_color[1],
                      self._clear_color[2], self._clear_color[3])
-        if self._depthbuffer_attached:
+        if self._depthbuffer_attached and self._stencilbuffer_attached:
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
+                    GL_STENCIL_BUFFER_BIT)
+        elif self._depthbuffer_attached:
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        elif self._stencilbuffer_attached:
+            glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
         else:
             glClear(GL_COLOR_BUFFER_BIT)
 
-    cdef void apply(self):
+    cdef int apply(self) except -1:
         if self.flags & GI_NEEDS_UPDATE:
             self.bind()
             RenderContext.apply(self)
             self.release()
             self.flag_update_done()
+        return 0
 
     cdef void reload(self):
         # recreate the framebuffer, without deleting it. the deletion is not
@@ -302,7 +371,7 @@ cdef class Fbo(RenderContext):
             callback()(self)
 
     def add_reload_observer(self, callback):
-        '''Add a callback to be called after the whole graphics context have
+        '''Add a callback to be called after the whole graphics context has
         been reloaded. This is where you can reupload your custom data in GPU.
 
         .. versionadded:: 1.2.0
@@ -315,7 +384,7 @@ cdef class Fbo(RenderContext):
 
     def remove_reload_observer(self, callback):
         '''Remove a callback from the observer list, previously added by
-        :func:`add_reload_observer`.
+        :meth:`add_reload_observer`.
 
         .. versionadded:: 1.2.0
 
@@ -365,4 +434,34 @@ cdef class Fbo(RenderContext):
         '''
         def __get__(self):
             return self._texture
+
+    property pixels:
+        '''Get the pixels texture, in RGBA format only, unsigned byte. The
+        origin of the image is at bottom left.
+
+        .. versionadded:: 1.7.0
+        '''
+        def __get__(self):
+            w, h = self._width, self._height
+            self.bind()
+            data = py_glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE)
+            self.release()
+            return data
+
+    cpdef get_pixel_color(self, int wx, int wy):
+        """Get the color of the pixel with specified window
+        coordinates wx, wy. It returns result in RGBA format.
+ 
+        .. versionadded:: 1.8.0
+        """
+        if wx > self._width or wy > self._height:
+            # window coordinates should not exceed the
+            # frame buffer size
+            return (0, 0, 0, 0)
+        self.bind()
+        data = py_glReadPixels(wx, wy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE)
+        self.release()
+        raw_data = str(data)
+        
+        return [ord(i) for i in raw_data]
 

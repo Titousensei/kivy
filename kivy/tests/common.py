@@ -69,6 +69,7 @@ class GraphicUnitTest(unittest.TestCase):
 
         # ensure our window is correcly created
         Window.create_window()
+        Window.canvas.clear()
 
     def on_window_flip(self, window):
         '''Internal method to be called when the window have just displayed an
@@ -209,7 +210,7 @@ class GraphicUnitTest(unittest.TestCase):
         if 'UNITTEST_INTERACTIVE' not in environ:
             return True
 
-        from Tkinter import Tk, Label, LEFT, RIGHT, BOTTOM, Button
+        from tkinter import Tk, Label, LEFT, RIGHT, BOTTOM, Button
         from PIL import Image, ImageTk
 
         self.retval = False
@@ -240,7 +241,7 @@ class GraphicUnitTest(unittest.TestCase):
         if 'UNITTEST_INTERACTIVE' not in environ:
             return False
 
-        from Tkinter import Tk, Label, LEFT, RIGHT, BOTTOM, Button
+        from tkinter import Tk, Label, LEFT, RIGHT, BOTTOM, Button
         from PIL import Image, ImageTk
 
         self.retval = False

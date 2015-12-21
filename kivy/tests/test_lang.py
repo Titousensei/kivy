@@ -4,30 +4,40 @@ Language tests
 '''
 
 import unittest
+from weakref import proxy
+from functools import partial
 
 
 class BaseClass(object):
+    uid = 0
+
     # base class needed for builder
     def __init__(self, **kwargs):
         super(BaseClass, self).__init__()
+        self.proxy_ref = proxy(self)
         self.children = []
         self.parent = None
         self.binded_func = {}
         self.id = None
+        self.ids = {}
         self.cls = []
+        self.ids = {}
+        self.uid = BaseClass.uid
+        BaseClass.uid += 1
 
     def add_widget(self, widget):
         self.children.append(widget)
         widget.parent = self
 
-    def create_property(self, name):
+    def create_property(self, name, value=None):
         pass
 
     def is_event_type(self, key):
         return key.startswith('on_')
 
-    def bind(self, **kwargs):
-        self.binded_func.update(kwargs)
+    def fbind(self, name, func, *largs):
+        self.binded_func[name] = partial(func, *largs)
+        return True
 
 
 class TestClass(BaseClass):
@@ -154,8 +164,8 @@ class LangTestCase(unittest.TestCase):
         Builder.load_string('''
 <TestClass>:
     on_press:
-        print 'hello world'
-        print 'this is working !'
+        print('hello world')
+        print('this is working !')
         self.a = 1
 ''')
         wid = TestClass()
@@ -165,3 +175,87 @@ class LangTestCase(unittest.TestCase):
         self.assertTrue('on_press' in wid.binded_func)
         wid.binded_func['on_press']()
         self.assertEquals(wid.a, 1)
+
+    def test_with_eight_spaces(self):
+        Builder = self.import_builder()
+        Builder.load_string('''
+<TestClass>:
+        on_press:
+                print('hello world')
+                print('this is working !')
+                self.a = 1
+''')
+        wid = TestClass()
+        Builder.apply(wid)
+        wid.a = 0
+
+        self.assertTrue('on_press' in wid.binded_func)
+        wid.binded_func['on_press']()
+        self.assertEquals(wid.a, 1)
+
+    def test_with_one_space(self):
+        Builder = self.import_builder()
+        Builder.load_string('''
+<TestClass>:
+ on_press:
+  print('hello world')
+  print('this is working !')
+  self.a = 1
+''')
+        wid = TestClass()
+        Builder.apply(wid)
+        wid.a = 0
+
+        self.assertTrue('on_press' in wid.binded_func)
+        wid.binded_func['on_press']()
+        self.assertEquals(wid.a, 1)
+
+    def test_with_two_spaces(self):
+        Builder = self.import_builder()
+        Builder.load_string('''
+<TestClass>:
+  on_press:
+    print('hello world')
+    print('this is working !')
+    self.a = 1
+''')
+        wid = TestClass()
+        Builder.apply(wid)
+        wid.a = 0
+
+        self.assertTrue('on_press' in wid.binded_func)
+        wid.binded_func['on_press']()
+        self.assertEquals(wid.a, 1)
+
+    def test_kv_python_init(self):
+        from kivy.lang import Builder, Factory
+        from kivy.uix.widget import Widget
+
+        class MyObject(object):
+            value = 55
+
+        class MyWidget(Widget):
+            cheese = MyObject()
+
+        Builder.load_string('''
+<MyWidget>:
+    x: 55
+    y: self.width + 10
+    height: self.cheese.value
+    width: 44
+
+<MySecondWidget@Widget>:
+    x: 55
+    Widget:
+        x: 23
+''')
+
+        w = MyWidget(x=22, height=12, y=999)
+        self.assertEqual(w.x, 22)
+        self.assertEqual(w.width, 44)
+        self.assertEqual(w.y, 44 + 10)
+        self.assertEqual(w.height, 12)
+
+        w2 = Factory.MySecondWidget(x=999)
+        self.assertEqual(w2.x, 999)
+        self.assertEqual(w2.children[0].x, 23)

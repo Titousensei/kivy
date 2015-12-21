@@ -29,10 +29,15 @@
 #			include "common_subset.h"
 #		else
 #			include <GLES2/gl2.h>
+#			include <GLES2/gl2ext.h>
+#		endif
+#		ifndef GL_DEPTH24_STENCIL8
+#			define GL_DEPTH24_STENCIL8                      GL_DEPTH24_STENCIL8_OES
 #		endif
 #	else
 #		ifdef __APPLE__
 #			include <OpenGL/gl.h>
+#			include <OpenGL/glext.h>
 #		else
 #			define GL_GLEXT_PROTOTYPES
 #			include <GL/gl.h>
@@ -46,13 +51,13 @@
 // In the webserver / unittest / buildbot case, we are compiling and running
 // kivy in an headless env, without proper GL support.
 // This is a hack to prevent to link with wrong symbol. :(
-#if __USE_MESAGL
+#if __USE_MESAGL == 1
 #	define glBlendEquationSeparate(x, y)
 #	define glDepthRangef glDepthRange
 #	define glClearDepthf glClearDepth
 
 // C redirection to prevent warning of undeclared symbol
-// (theses functions are not existing in GLES2, but if we are using GLES2
+// (these functions are not existing in GLES2, but if we are using GLES2
 // headers with GL library, we need to declare them.)
 GL_APICALL void GL_APIENTRY glDepthRange( GLclampf near_val, GLclampf far_val );
 GL_APICALL void GL_APIENTRY glClearDepth( GLclampf depth );
@@ -75,6 +80,7 @@ void glew_dynamic_binding() {
      */
     if (glGenFramebuffers == NULL) {
         printf("GL: glGenFramebuffers is NULL, try to detect an extension\n");
+        printf("GL: available extensions: %s\n", gl_extensions);
         if (strstr(gl_extensions, "ARB_framebuffer_object")) {
             printf("GL: ARB_framebuffer_object is supported\n");
 
@@ -123,4 +129,3 @@ void glew_dynamic_binding() {
 
 #endif /* __GLEW_DYNAMIC_BINDING */
 #endif /* __USE_GLEW */
-

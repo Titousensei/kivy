@@ -1,5 +1,4 @@
-'''
-Label
+'''Label
 =====
 
 The :class:`Label` widget is for rendering text. It supports ascii and unicode
@@ -15,7 +14,69 @@ strings::
     l = Label(text='Multi\\nLine')
 
     # size
-    l = Label(text='Hello world', font_size=20)
+    l = Label(text='Hello world', font_size='20sp')
+
+.. _kivy-uix-label-sizing-and-text-content:
+
+Sizing and text content
+---------------------------
+
+By default, the size of :class:`Label` is not affected by :attr:`~Label.text`
+content and the text is not affected by the size. In order to control
+sizing, you must specify :attr:`~Label.text_size` to constrain the text
+and/or bind :attr:`~Label.size` to :attr:`~Label.texture_size` to grow with
+the text.
+
+For example, this label's size will be set to the text content
+(plus :attr:`~Label.padding`):
+
+.. code-block:: python
+
+    Label:
+        size: self.texture_size
+
+This label's text will wrap at the specified width and be clipped to the height:
+
+.. code-block:: python
+
+    Label:
+        text_size: cm(6), cm(4)
+
+.. note:: The :attr:`~Label.shorten` and :attr:`~Label.max_lines` attributes
+ control how overflowing text behaves.
+
+Combine these concepts to create a Label that can grow vertically but wraps the
+text at a certain width:
+
+.. code-block:: python
+
+    Label:
+        text_size: root.width, None
+        size: self.texture_size
+
+Text alignment and wrapping
+---------------------------
+
+The :class:`Label` has :attr:`~Label.halign` and :attr:`~Label.valign`
+properties to control the alignment of its text. However, by default the text
+image (:attr:`~Label.texture`) is only just large enough to contain the
+characters and is positioned in the center of the Label. The valign property
+will have no effect and halign will only have an effect if your text has
+newlines; a single line of text will appear to be centered even though halign is
+set to left (by default).
+
+In order for the alignment properties to take effect, set the
+:attr:`~Label.text_size`, which specifies the size of the bounding box within
+which text is aligned. For instance, the following code binds this size to the
+size of the Label, so text will be aligned within the widget bounds. This
+will also automatically wrap the text of the Label to remain within this area.
+
+.. code-block:: python
+
+    Label:
+        text_size: self.size
+        halign: 'right'
+        valign: 'middle'
 
 Markup text
 -----------
@@ -23,7 +84,8 @@ Markup text
 .. versionadded:: 1.1.0
 
 You can change the style of the text using :doc:`api-kivy.core.text.markup`.
-The syntax is near the bbcode syntax, but only the inline styling is allowed::
+The syntax is similar to the bbcode syntax but only the inline styling is
+allowed::
 
     # hello world with world in bold
     l = Label(text='Hello [b]World[/b]', markup=True)
@@ -52,12 +114,16 @@ The following tags are available:
     Change the text color
 ``[ref=<str>][/ref]``
     Add an interactive zone. The reference + bounding box inside the
-    reference will be available in :data:`Label.refs`
+    reference will be available in :attr:`Label.refs`
 ``[anchor=<str>]``
     Put an anchor in the text. You can get the position of your anchor within
-    the text with :data:`Label.anchors`
+    the text with :attr:`Label.anchors`
+``[sub][/sub]``
+    Display the text at a subscript position relative to the text before it.
+``[sup][/sup]``
+    Display the text at a superscript position relative to the text before it.
 
-If you want to render the markup text with a character [ or ] or &, you need to
+If you want to render the markup text with a [ or ] or & character, you need to
 escape them. We created a simple syntax::
 
     [   -> &bl;
@@ -74,22 +140,76 @@ Interactive Zone in Text
 .. versionadded:: 1.1.0
 
 You can now have definable "links" using text markup. The idea is to be able
-to detect when the user clicks on part of the text, and to react.
+to detect when the user clicks on part of the text and to react.
 The tag ``[ref=xxx]`` is used for that.
 
-In this example, we are creating a reference on the word "World". When a click
-happens on it, the function ``print_it`` will be called with the name of the
-reference::
+In this example, we are creating a reference on the word "World". When
+this word is clicked, the function ``print_it`` will be called with the
+name of the reference::
 
     def print_it(instance, value):
-        print 'User clicked on', value
+        print('User clicked on', value)
     widget = Label(text='Hello [ref=world]World[/ref]', markup=True)
     widget.bind(on_ref_press=print_it)
 
-For a better rendering, you could add a color for the reference. Replace the
+For prettier rendering, you could add a color for the reference. Replace the
 ``text=`` in the previous example with::
 
     'Hello [ref=world][color=0000ff]World[/color][/ref]'
+
+Usage example
+-------------
+
+The following example marks the anchors and references contained in a label::
+
+    from kivy.app import App
+    from kivy.uix.label import Label
+    from kivy.clock import Clock
+    from kivy.graphics import Color, Rectangle
+
+
+    class TestApp(App):
+
+        @staticmethod
+        def get_x(label, ref_x):
+            """ Return the x value of the ref/anchor relative to the canvas """
+            return label.center_x - label.texture_size[0] * 0.5 + ref_x
+
+        @staticmethod
+        def get_y(label, ref_y):
+            """ Return the y value of the ref/anchor relative to the canvas """
+            # Note the inversion of direction, as y values start at the top of
+            # the texture and increase downwards
+            return label.center_y + label.texture_size[1] * 0.5 - ref_y
+
+        def show_marks(self, label):
+
+            # Indicate the position of the anchors with a red top marker
+            for name, anc in label.anchors.items():
+                with label.canvas:
+                    Color(1, 0, 0)
+                    Rectangle(pos=(self.get_x(label, anc[0]),
+                                   self.get_y(label, anc[1])),
+                              size=(3, 3))
+
+            # Draw a green surround around the refs. Note the sizes y inversion
+            for name, boxes in label.refs.items():
+                for box in boxes:
+                    with label.canvas:
+                        Color(0, 1, 0, 0.25)
+                        Rectangle(pos=(self.get_x(label, box[0]),
+                                       self.get_y(label, box[1])),
+                                  size=(box[2] - box[0],
+                                        box[1] - box[3]))
+
+        def build(self):
+            label = Label(
+                text='[anchor=a]a\\nChars [anchor=b]b\\n[ref=myref]ref[/ref]',
+                markup=True)
+            Clock.schedule_once(lambda dt: self.show_marks(label), 1)
+            return label
+
+    TestApp().run()
 
 '''
 
@@ -101,8 +221,9 @@ from kivy.uix.widget import Widget
 from kivy.core.text import Label as CoreLabel
 from kivy.core.text.markup import MarkupLabel as CoreMarkupLabel
 from kivy.properties import StringProperty, OptionProperty, \
-        NumericProperty, BooleanProperty, ReferenceListProperty, \
-        ListProperty, ObjectProperty, DictProperty
+    NumericProperty, BooleanProperty, ReferenceListProperty, \
+    ListProperty, ObjectProperty, DictProperty
+from kivy.utils import get_hex_from_color
 
 
 class Label(Widget):
@@ -114,27 +235,40 @@ class Label(Widget):
             ``[ref]`` tag in a text markup.
     '''
 
+    __events__ = ['on_ref_press']
+
     _font_properties = ('text', 'font_size', 'font_name', 'bold', 'italic',
-        'halign', 'valign', 'padding_x', 'padding_y', 'text_size', 'shorten',
-        'mipmap', 'markup')
+                        'halign', 'valign', 'padding_x', 'padding_y',
+                        'text_size', 'shorten', 'mipmap', 'markup',
+                        'line_height', 'max_lines', 'strip', 'shorten_from',
+                        'split_str', 'unicode_errors')
 
     def __init__(self, **kwargs):
         self._trigger_texture = Clock.create_trigger(self.texture_update, -1)
-        self.register_event_type('on_ref_press')
         super(Label, self).__init__(**kwargs)
 
         # bind all the property for recreating the texture
         d = Label._font_properties
-        dkw = {}
+        fbind = self.fbind
+        update = self._trigger_texture_update
         for x in d:
-            dkw[x] = partial(self._trigger_texture_update, x)
-        self.bind(**dkw)
+            fbind(x, update, x)
 
         self._label = None
         self._create_label()
 
+        fbind('markup', self._bind_for_markup)
+        if self.markup:
+            self._bind_for_markup(self, self.markup)
+
         # force the texture creation
         self._trigger_texture()
+
+    def _bind_for_markup(self, inst, markup):
+        if markup:
+            self.fbind('color', self._trigger_texture_update, 'color')
+        else:
+            self.funbind('color', self._trigger_texture_update, 'color')
 
     def _create_label(self):
         # create the core label class according to markup value
@@ -147,10 +281,7 @@ class Label(Widget):
            (not markup and cls is not CoreLabel):
             # markup have change, we need to change our rendering method.
             d = Label._font_properties
-            dkw = dict(zip(d, [getattr(self, x) for x in d]))
-            # XXX font_size core provider compatibility
-            if Label.font_size.get_format(self) == 'px':
-                dkw['font_size'] *= 1.333
+            dkw = dict(list(zip(d, [getattr(self, x) for x in d])))
             if markup:
                 self._label = CoreMarkupLabel(**dkw)
             else:
@@ -166,9 +297,6 @@ class Label(Widget):
             elif name == 'text_size':
                 self._label.usersize = value
             elif name == 'font_size':
-                # XXX font_size core provider compatibility
-                if Label.font_size.get_format(self) == 'px':
-                    value *= 1.333
                 self._label.options[name] = value
             else:
                 self._label.options[name] = value
@@ -177,17 +305,37 @@ class Label(Widget):
     def texture_update(self, *largs):
         '''Force texture recreation with the current Label properties.
 
-        After this function call, the :data:`texture` and :data:`texture_size`
+        After this function call, the :attr:`texture` and :attr:`texture_size`
         will be updated in this order.
         '''
+        mrkup = self._label.__class__ is CoreMarkupLabel
         self.texture = None
-        if self._label.text.strip() == '':
+
+        if (not self._label.text or (self.halign[-1] == 'y' or self.strip) and
+            not self._label.text.strip()):
             self.texture_size = (0, 0)
+            if mrkup:
+                self.refs, self._label._refs = {}, {}
+                self.anchors, self._label._anchors = {}, {}
         else:
-            self._label.refresh()
-            if self._label.__class__ is CoreMarkupLabel:
+            if mrkup:
+                text = self.text
+                # we must strip here, otherwise, if the last line is empty,
+                # markup will retain the last empty line since it only strips
+                # line by line within markup
+                if self.halign[-1] == 'y' or self.strip:
+                    text = text.strip()
+                self._label.text = ''.join(('[color=',
+                                            get_hex_from_color(self.color),
+                                            ']', text, '[/color]'))
+                self._label.refresh()
+                # force the rendering to get the references
+                if self._label.texture:
+                    self._label.texture.bind()
                 self.refs = self._label.refs
                 self.anchors = self._label.anchors
+            else:
+                self._label.refresh()
             texture = self._label.texture
             if texture is not None:
                 self.texture = self._label.texture
@@ -202,7 +350,7 @@ class Label(Widget):
         tx -= self.center_x - self.texture_size[0] / 2.
         ty -= self.center_y - self.texture_size[1] / 2.
         ty = self.texture_size[1] - ty
-        for uid, zones in self.refs.iteritems():
+        for uid, zones in self.refs.items():
             for zone in zones:
                 x, y, w, h = zone
                 if x <= tx <= w and y <= ty <= h:
@@ -216,6 +364,16 @@ class Label(Widget):
     #
     # Properties
     #
+
+    disabled_color = ListProperty([1, 1, 1, .3])
+    '''Text color, in the format (r, g, b, a)
+
+    .. versionadded:: 1.8.0
+
+    :attr:`disabled_color` is a :class:`~kivy.properties.ListProperty` and
+    defaults to [1, 1, 1, .5].
+    '''
+
     text = StringProperty('')
     '''Text of the label.
 
@@ -227,12 +385,18 @@ class Label(Widget):
 
         widget = Label(text=u'My unicode string')
 
-    :data:`text` a :class:`~kivy.properties.StringProperty`.
+    :attr:`text` is a :class:`~kivy.properties.StringProperty` and defaults to
+    ''.
     '''
 
     text_size = ListProperty([None, None])
     '''By default, the label is not constrained to any bounding box.
     You can set the size constraint of the label with this property.
+    The text will autoflow into the constrains. So although the font size
+    will not be reduced, the text will be arranged to fit into the box as best
+    as possible, with any text still outside the box clipped.
+
+    This sets and clips :attr:`texture_size` to text_size if not None.
 
     .. versionadded:: 1.0.4
 
@@ -243,16 +407,16 @@ class Label(Widget):
 
     .. note::
 
-        This text_size property is the same as
-        :data:`~kivy.core.text.Label.usersize` property in
-        :class:`~kivy.core.text.Label` class. (It is named size= in
+        This text_size property is the same as the
+        :attr:`~kivy.core.text.Label.usersize` property in the
+        :class:`~kivy.core.text.Label` class. (It is named size= in the
         constructor.)
 
-    :data:`text_size` is a :class:`~kivy.properties.ListProperty`,
-    default to (None, None), meaning no size restriction by default.
+    :attr:`text_size` is a :class:`~kivy.properties.ListProperty` and
+    defaults to (None, None), meaning no size restriction by default.
     '''
 
-    font_name = StringProperty('DroidSans')
+    font_name = StringProperty('Roboto')
     '''Filename of the font to use. The path can be absolute or relative.
     Relative paths are resolved by the :func:`~kivy.resources.resource_find`
     function.
@@ -260,7 +424,7 @@ class Label(Widget):
     .. warning::
 
         Depending of your text provider, the font file can be ignored. However,
-        you can mostly use this without trouble.
+        you can mostly use this without problems.
 
         If the font used lacks the glyphs for the particular language/symbols
         you are using, you will see '[]' blank box characters instead of the
@@ -270,15 +434,25 @@ class Label(Widget):
 
         .. |unicodechar| image:: images/unicode-char.png
 
-    :data:`font_name` is a :class:`~kivy.properties.StringProperty`, default to
-    'DroidSans'.
+    :attr:`font_name` is a :class:`~kivy.properties.StringProperty` and
+    defaults to 'Roboto'.
     '''
 
-    font_size = NumericProperty('12px')
+    font_size = NumericProperty('15sp')
     '''Font size of the text, in pixels.
 
-    :data:`font_size` is a :class:`~kivy.properties.NumericProperty`, default to
-    12.
+    :attr:`font_size` is a :class:`~kivy.properties.NumericProperty` and
+    defaults to 15sp.
+    '''
+
+    line_height = NumericProperty(1.0)
+    '''Line Height for the text. e.g. line_height = 2 will cause the spacing
+    between lines to be twice the size.
+
+    :attr:`line_height` is a :class:`~kivy.properties.NumericProperty` and
+    defaults to 1.0.
+
+    .. versionadded:: 1.5.0
     '''
 
     bold = BooleanProperty(False)
@@ -289,8 +463,8 @@ class Label(Widget):
         Depending of your font, the bold attribute may have no impact on your
         text rendering.
 
-    :data:`bold` is a :class:`~kivy.properties.BooleanProperty`, default to
-    False
+    :attr:`bold` is a :class:`~kivy.properties.BooleanProperty` and defaults to
+    False.
     '''
 
     italic = BooleanProperty(False)
@@ -301,71 +475,84 @@ class Label(Widget):
         Depending of your font, the italic attribute may have no impact on your
         text rendering.
 
-    :data:`italic` is a :class:`~kivy.properties.BooleanProperty`, default to
-    False
+    :attr:`italic` is a :class:`~kivy.properties.BooleanProperty` and defaults
+    to False.
     '''
 
     padding_x = NumericProperty(0)
     '''Horizontal padding of the text inside the widget box.
 
-    :data:`padding_x` is a :class:`~kivy.properties.NumericProperty`, default to
-    0
+    :attr:`padding_x` is a :class:`~kivy.properties.NumericProperty` and
+    defaults to 0.
+
+    .. versionchanged:: 1.9.0
+        `padding_x` has been fixed to work as expected.
+        In the past, the text was padded by the negative of its values.
     '''
 
     padding_y = NumericProperty(0)
     '''Vertical padding of the text inside the widget box.
 
-    :data:`padding_x` is a :class:`~kivy.properties.NumericProperty`, default to
-    0
+    :attr:`padding_y` is a :class:`~kivy.properties.NumericProperty` and
+    defaults to 0.
+
+    .. versionchanged:: 1.9.0
+        `padding_y` has been fixed to work as expected.
+        In the past, the text was padded by the negative of its values.
     '''
 
     padding = ReferenceListProperty(padding_x, padding_y)
     '''Padding of the text in the format (padding_x, padding_y)
 
-    :data:`padding` is a :class:`~kivy.properties.ReferenceListProperty` of
-    (:data:`padding_x`, :data:`padding_y`) properties.
+    :attr:`padding` is a :class:`~kivy.properties.ReferenceListProperty` of
+    (:attr:`padding_x`, :attr:`padding_y`) properties.
     '''
 
-    halign = OptionProperty('left', options=['left', 'center', 'right'])
+    halign = OptionProperty('left', options=['left', 'center', 'right',
+                            'justify'])
     '''Horizontal alignment of the text.
 
-    :data:`halign` is a :class:`~kivy.properties.OptionProperty`, default to
-    'left'. Available options are : left, center and right.
+    :attr:`halign` is an :class:`~kivy.properties.OptionProperty` and
+    defaults to 'left'. Available options are : left, center, right and
+    justify.
 
     .. warning::
 
         This doesn't change the position of the text texture of the Label
         (centered), only the position of the text in this texture. You probably
-        want to bind the size of the Label to the :data:`texture_size` or set a
-        :data:`text_size`.
+        want to bind the size of the Label to the :attr:`texture_size` or set a
+        :attr:`text_size`.
+
+    .. versionchanged:: 1.6.0
+        A new option was added to :attr:`halign`, namely `justify`.
     '''
 
     valign = OptionProperty('bottom', options=['bottom', 'middle', 'top'])
     '''Vertical alignment of the text.
 
-    :data:`valign` is a :class:`~kivy.properties.OptionProperty`, default to
-    'bottom'. Available options are : bottom, middle and top.
+    :attr:`valign` is an :class:`~kivy.properties.OptionProperty` and defaults
+    to 'bottom'. Available options are : bottom, middle and top.
 
     .. warning::
 
         This doesn't change the position of the text texture of the Label
-        (centered), only the position of the text in this texture. You probably
-        want to bind the size of the Label to the :data:`texture_size` or set a
-        :data:`text_size`.
+        (centered), only the position of the text within this texture. You
+        probably want to bind the size of the Label to the :attr:`texture_size`
+        or set a :attr:`text_size` to change this behavior.
     '''
 
     color = ListProperty([1, 1, 1, 1])
     '''Text color, in the format (r, g, b, a)
 
-    :data:`color` is a :class:`~kivy.properties.ListProperty`, default to [1, 1,
-    1, 1].
+    :attr:`color` is a :class:`~kivy.properties.ListProperty` and defaults to
+    [1, 1, 1, 1].
     '''
 
     texture = ObjectProperty(None, allownone=True)
     '''Texture object of the text.
     The text is rendered automatically when a property changes. The OpenGL
     texture created in this operation is stored in this property. You can use
-    this :data:`texture` for any graphics elements.
+    this :attr:`texture` for any graphics elements.
 
     Depending on the texture creation, the value will be a
     :class:`~kivy.graphics.texture.Texture` or
@@ -373,94 +560,154 @@ class Label(Widget):
 
     .. warning::
 
-        The :data:`texture` update is scheduled for the next frame. If you need
+        The :attr:`texture` update is scheduled for the next frame. If you need
         the texture immediately after changing a property, you have to call
-        the :meth:`texture_update` method before accessing :data:`texture`::
+        the :meth:`texture_update` method before accessing :attr:`texture`::
 
             l = Label(text='Hello world')
             # l.texture is good
-            l.font_size = 50
+            l.font_size = '50sp'
             # l.texture is not updated yet
-            l.update_texture()
+            l.texture_update()
             # l.texture is good now.
 
-    :data:`texture` is a :class:`~kivy.properties.ObjectProperty`, default to
-    None.
+    :attr:`texture` is an :class:`~kivy.properties.ObjectProperty` and defaults
+    to None.
     '''
 
     texture_size = ListProperty([0, 0])
-    '''Texture size of the text.
+    '''Texture size of the text. The size is determined by the font size and
+    text. If :attr:`text_size` is [None, None], the texture will be the size
+    required to fit the text, otherwise it's clipped to fit :attr:`text_size`.
+
+    When :attr:`text_size` is [None, None], one can bind to texture_size
+    and rescale it proportionally to fit the size of the label in order to
+    make the text fit maximally in the label.
 
     .. warning::
 
-        The :data:`texture_size` is set after the :data:`texture` property. If
-        you listen for changes to :data:`texture`, :data:`texture_size` will not
-        be up-to-date in your callback. Bind to :data:`texture_size` instead.
+        The :attr:`texture_size` is set after the :attr:`texture`
+        property. If you listen for changes to :attr:`texture`,
+        :attr:`texture_size` will not be up-to-date in your callback.
+        Bind to :attr:`texture_size` instead.
     '''
 
     mipmap = BooleanProperty(False)
-    '''Indicates OpenGL mipmapping applied to texture or not.
+    '''Indicates whether OpenGL mipmapping is applied to the texture or not.
     Read :ref:`mipmap` for more information.
 
     .. versionadded:: 1.0.7
 
-    :data:`mipmap` is a :class:`~kivy.properties.BooleanProperty`, default to
-    False.
+    :attr:`mipmap` is a :class:`~kivy.properties.BooleanProperty` and defaults
+    to False.
     '''
 
     shorten = BooleanProperty(False)
     '''
     Indicates whether the label should attempt to shorten its textual contents
-    as much as possible if a `text_size` is given. Setting this to True without
-    an appropriately set `text_size` will lead to unexpected results.
+    as much as possible if a :attr:`text_size` is given. Setting this to True
+    without an appropriately set :attr:`text_size` will lead to unexpected
+    results.
 
-    :data:`shorten` is a :class:`~kivy.properties.BooleanProperty`, default to
-    False.
+    :attr:`shorten_from` and :attr:`split_str` control the direction from
+    which the :attr:`text` is split, as well as where in the :attr:`text` we
+    are allowed to split.
+
+    :attr:`shorten` is a :class:`~kivy.properties.BooleanProperty` and defaults
+    to False.
+    '''
+
+    shorten_from = OptionProperty('center', options=['left', 'center',
+                                                     'right'])
+    '''The side from which we should shorten the text from, can be left,
+    right, or center.
+
+    For example, if left, the ellipsis will appear towards the left side and we
+    will display as much text starting from the right as possible. Similar to
+    :attr:`shorten`, this option only applies when :attr:`text_size` [0] is
+    not None, In this case, the string is shortened to fit within the specified
+    width.
+
+    .. versionadded:: 1.9.0
+
+    :attr:`shorten_from` is a :class:`~kivy.properties.OptionProperty` and
+    defaults to `center`.
+    '''
+
+    split_str = StringProperty('')
+    '''The string used to split the :attr:`text` while shortening the string
+    when :attr:`shorten` is True.
+
+    For example, if it's a space, the string will be broken into words and as
+    many whole words that can fit into a single line will be displayed. If
+    :attr:`shorten_from` is the empty string, `''`, we split on every character
+    fitting as much text as possible into the line.
+
+    .. versionadded:: 1.9.0
+
+    :attr:`split_str` is a :class:`~kivy.properties.StringProperty` and
+    defaults to `''` (the empty string).
+    '''
+
+    unicode_errors = OptionProperty(
+        'replace', options=('strict', 'replace', 'ignore'))
+    '''How to handle unicode decode errors. Can be `'strict'`, `'replace'` or
+    `'ignore'`.
+
+    .. versionadded:: 1.9.0
+
+    :attr:`unicode_errors` is an :class:`~kivy.properties.OptionProperty` and
+    defaults to `'replace'`.
     '''
 
     markup = BooleanProperty(False)
     '''
     .. versionadded:: 1.1.0
 
-    If true, the text will be rendered with
-    :class:`~kivy.core.text.markup.MarkupLabel`: you can change the style of the
-    text using tags. Check :doc:`api-kivy.core.text.markup` documentation for
-    more information.
+    If True, the text will be rendered using the
+    :class:`~kivy.core.text.markup.MarkupLabel`: you can change the
+    style of the text using tags. Check the
+    :doc:`api-kivy.core.text.markup` documentation for more information.
 
-    :data:`markup` is a :class:`~kivy.properties.BooleanProperty`, default to
-    False.
+    :attr:`markup` is a :class:`~kivy.properties.BooleanProperty` and defaults
+    to False.
     '''
 
     refs = DictProperty({})
     '''
     .. versionadded:: 1.1.0
 
-    List of ``[ref=xxx]`` markup put into the text, with the bounding box of
-    all the words contained in a ref, only after rendering.
+    List of ``[ref=xxx]`` markup items in the text with the bounding box of
+    all the words contained in a ref, available only after rendering.
 
     For example, if you wrote::
 
-        Check out my [ref=hello]link[/hello]
+        Check out my [ref=hello]link[/ref]
 
     The refs will be set with::
 
         {'hello': ((64, 0, 78, 16), )}
 
-    You know that the reference "hello" have a bounding box set at (x1, y1, x2,
-    y2). The current Label implementation uses these references if they exist in
-    your markup text, automatically doing the collision with the touch, and
+    The references marked "hello" have a bounding box at (x1, y1, x2, y2).
+    These co-ordinates are relative to the top left corner of the text, with
+    the y value increasing downwards. You can define multiple refs with the same
+    name: each occurence will be added as another (x1, y1, x2, y2) tuple to
+    this list.
+
+    The current Label implementation uses these references if they exist in
+    your markup text, automatically doing the collision with the touch and
     dispatching an `on_ref_press` event.
 
     You can bind a ref event like this::
 
         def print_it(instance, value):
-            print 'User click on', value
+            print('User click on', value)
         widget = Label(text='Hello [ref=world]World[/ref]', markup=True)
         widget.on_ref_press(print_it)
 
     .. note::
 
-        This is working only with markup text. You need :data:`markup` set to
+        This works only with markup text. You need :attr:`markup` set to
         True.
     '''
 
@@ -468,16 +715,20 @@ class Label(Widget):
     '''
     .. versionadded:: 1.1.0
 
-    Position of all the ``[anchor=xxx]`` markup put into the text.
+    Position of all the ``[anchor=xxx]`` markup in the text.
+    These co-ordinates are relative to the top left corner of the text, with
+    the y value increasing downwards. Anchors names should be unique and only
+    the first occurence of any duplicate anchors will be recorded.
 
-    You can put anchors in your markup text::
+
+    You can place anchors in your markup text as follows::
 
         text = """
             [anchor=title1][size=24]This is my Big title.[/size]
             [anchor=content]Hello world
         """
 
-    Then, all the ``[anchor=]`` references will be removed, and you'll get all
+    Then, all the ``[anchor=]`` references will be removed and you'll get all
     the anchor positions in this property (only after rendering)::
 
         >>> widget = Label(text=text, markup=True)
@@ -487,7 +738,30 @@ class Label(Widget):
 
     .. note::
 
-        This is working only with markup text. You need :data:`markup` set to
+        This works only with markup text. You need :attr:`markup` set to
         True.
 
+    '''
+
+    max_lines = NumericProperty(0)
+    '''Maximum number of lines to use, defaults to 0, which means unlimited.
+    Please note that :attr:`shorten` take over this property. (with
+    shorten, the text is always one line.)
+
+    .. versionadded:: 1.8.0
+
+    :attr:`max_lines` is a :class:`~kivy.properties.NumericProperty` and
+    defaults to 0.
+    '''
+
+    strip = BooleanProperty(False)
+    '''Whether leading and trailing spaces and newlines should be stripped from
+    each displayed line. If True, every line will start at the right or left
+    edge, depending on :attr:`halign`. If :attr:`halign` is `justify` it is
+    implicitly True.
+
+    .. versionadded:: 1.9.0
+
+    :attr:`strip` is a :class:`~kivy.properties.BooleanProperty` and
+    defaults to False.
     '''

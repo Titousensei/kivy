@@ -4,15 +4,15 @@ FFmpeg video abstraction
 
 .. versionadded:: 1.0.8
 
-This abstraction require ffmpeg python extensions. We made a special extension
-that is used for android platform, but can also be used on x86 platform. The
-project is available at::
+This abstraction requires ffmpeg python extensions. We have made a special
+extension that is used for the android platform but can also be used on x86
+platforms. The project is available at::
 
     http://github.com/tito/ffmpeg-android
 
-The extension is designed to implement a video player, what we need here.
-Refer to the documentation of ffmpeg-android project for more information about
-the requirement.
+The extension is designed for implementing a video player.
+Refer to the documentation of the ffmpeg-android project for more information
+about the requirements.
 '''
 
 try:
@@ -45,6 +45,7 @@ class VideoFFMpeg(VideoBase):
         if self._player:
             self.unload()
         self._player = ffmpeg.FFVideo(self._filename)
+        self._player.set_volume(self._volume)
         self._do_load = True
 
     def stop(self):
@@ -85,8 +86,9 @@ class VideoFFMpeg(VideoBase):
             self._texture.flip_vertical()
             self.dispatch('on_load')
 
-        self._texture.blit_buffer(frame)
-        self.dispatch('on_frame')
+        if self._texture:
+            self._texture.blit_buffer(frame)
+            self.dispatch('on_frame')
 
     def _get_duration(self):
         if self._player is None:
@@ -98,13 +100,7 @@ class VideoFFMpeg(VideoBase):
             return 0
         return self._player.get_position()
 
-    def _get_volume(self):
-        if self._player is None:
-            return 0
-        self._volume = self._player.get_volume()
-        return self._volume
-
-    def _set_volume(self, volume):
-        if self._player is None:
-            return
-        self._player.set_volume(volume)
+    def _set_volume(self, value):
+        self._volume = value
+        if self._player:
+            self._player.set_volume(self._volume)

@@ -1,3 +1,5 @@
+include "config.pxi"
+
 cdef class Instruction
 cdef class InstructionGroup
 cdef class ContextInstruction
@@ -7,23 +9,28 @@ cdef class Canvas
 cdef class RenderContext
 
 from vbo cimport *
-from context_instructions cimport *
 from compiler cimport *
 from shader cimport *
 from texture cimport Texture
+from kivy._event cimport ObjectWithUid
 
 cdef void reset_gl_context()
 
 cdef class Instruction
 cdef class InstructionGroup(Instruction)
 
-cdef class Instruction:
+cdef class Instruction(ObjectWithUid):
     cdef int flags
-    cdef str group
+    cdef public str group
     cdef InstructionGroup parent
+    cdef object __weakref__
+    cdef object __proxy_ref
 
-    cdef void apply(self)
-    cdef void flag_update(self, int do_parent=?)
+    cdef int apply(self) except -1
+    IF DEBUG:
+        cdef int flag_update(self, int do_parent=?, list _instrs=?) except -1
+    ELSE:
+        cdef void flag_update(self, int do_parent=?)
     cdef void flag_update_done(self)
     cdef void set_parent(self, Instruction parent)
     cdef void reload(self)
@@ -33,7 +40,7 @@ cdef class Instruction:
     cdef void rremove(self, InstructionGroup ig)
 
 cdef class InstructionGroup(Instruction):
-    cdef list children
+    cdef public list children
     cdef InstructionGroup compiled_children
     cdef GraphicsCompiler compiler
     cdef void build(self)
@@ -51,14 +58,17 @@ cdef class ContextInstruction(Instruction):
     cdef list context_pop
 
     cdef RenderContext get_context(self)
-    cdef void set_state(self, str name, value)
-    cdef void push_state(self, str name)
-    cdef void pop_state(self, str name)
+    cdef int set_state(self, str name, value) except -1
+    cdef int push_state(self, str name) except -1
+    cdef int pop_state(self, str name) except -1
+
+
+from context_instructions cimport BindTexture
 
 cdef class VertexInstruction(Instruction):
     cdef BindTexture texture_binding
     cdef VertexBatch batch
-    cdef list _tex_coords
+    cdef float _tex_coords[8]
 
     cdef void radd(self, InstructionGroup ig)
     cdef void rinsert(self, InstructionGroup ig, int index)
@@ -70,8 +80,8 @@ cdef class Callback(Instruction):
     cdef Shader _shader
     cdef object func
     cdef int _reset_context
-    cdef void apply(self)
-    cdef void enter(self)
+    cdef int apply(self) except -1
+    cdef int enter(self) except -1
 
 
 
@@ -81,7 +91,6 @@ cdef class CanvasBase(InstructionGroup):
     pass
 
 cdef class Canvas(CanvasBase):
-    cdef object __weakref__
     cdef float _opacity
     cdef CanvasBase _before
     cdef CanvasBase _after
@@ -90,27 +99,28 @@ cdef class Canvas(CanvasBase):
     cpdef add(self, Instruction c)
     cpdef remove(self, Instruction c)
     cpdef draw(self)
-    cdef void apply(self)
+    cdef int apply(self) except -1
 
 
 cdef class RenderContext(Canvas):
     cdef Shader _shader
     cdef dict state_stacks
-    #cdef TextureManager texture_manager
     cdef Texture default_texture
     cdef dict bind_texture
+    cdef int _use_parent_projection
+    cdef int _use_parent_modelview
 
     cdef void set_texture(self, int index, Texture texture)
-    cdef void set_state(self, str name, value)
+    cdef void set_state(self, str name, value, int apply_now=?)
     cdef get_state(self, str name)
-    cdef void set_states(self, dict states)
-    cdef void push_state(self, str name)
-    cdef void push_states(self, list names)
-    cdef void pop_state(self, str name)
-    cdef void pop_states(self, list names)
-    cdef void enter(self)
-    cdef void leave(self)
-    cdef void apply(self)
+    cdef int set_states(self, dict states) except -1
+    cdef int push_state(self, str name) except -1
+    cdef int push_states(self, list names) except -1
+    cdef int pop_state(self, str name) except -1
+    cdef int pop_states(self, list names) except -1
+    cdef int enter(self) except -1
+    cdef int leave(self) except -1
+    cdef int apply(self) except -1
     cpdef draw(self)
     cdef void reload(self)
 

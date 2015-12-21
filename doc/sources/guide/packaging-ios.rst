@@ -5,64 +5,102 @@ Create a package for IOS
 
 .. versionadded:: 1.2.0
 
-.. warning::
+.. note::
 
-    This method is still under development.
+    From the 4th march 2015, the toolchain for iOS has been rewritten. The
+    previous instructions don't work anymore (using `build_all.sh`). We
+    strongly recommend you upgrade to the latest toochain which contains many
+    improvements, including support for i386, x86_64, armv7, arm64 and the
+    iOS emulators. If you must use the older version, try the old-toolchain
+    tag in git.
 
-The overall method for creating a package on IOS can be explained in 4 steps:
+.. note::
+
+    Currently, packages for iOS can only be generated with Python 2.7. Python
+    3.3+ support is on the way.
+
+The overall process for creating a package for IOS can be explained in 4 steps:
 
 #. Compile python + modules for IOS
-#. Create an Xcode project
-#. Populate the Xcode project with your application source code
+#. Create an Xcode project and link your source code
 #. Customize
-
-The current method have been tested with Xcode 4.2
 
 Prerequisites
 -------------
 
-You need to install some dependencies, like cython or mercurial. If you're
-using Xcode 4.3, then you also need to install autotools. We encourage you to
-use `Homebrew <http://mxcl.github.com/homebrew/>`_ to install thoses dependencies::
+You need to install some dependencies, like cython, autotools, etc. We
+encourage you to use `Homebrew <http://mxcl.github.com/homebrew/>`_ to install
+those dependencies::
 
-    brew install cython autoconf automake libtool pkg-config mercurial
+    brew install autoconf automake libtool pkg-config
     brew link libtool
-    brew link mercurial
+    sudo easy_install pip
+    sudo pip install cython==0.21.2
 
-Ensure that everything is ok before starting the second step!
+For more detail, see :ref:`IOS Prerequisites <packaging_ios_prerequisites>`.
+Just ensure that everything is ok before starting the second step!
 
 .. _Compile the distribution:
 
 Compile the distribution
 ------------------------
 
-Open a terminal, and::
+Open a terminal, and type::
 
     $ git clone git://github.com/kivy/kivy-ios
     $ cd kivy-ios
-    $ tools/build-all.sh
+    $ ./toolchain.py build kivy
 
-If you don't want to compile all the things needed for kivy, edit and change
-`tools/build-all.sh` to your needs.
-
-Most of the python distribution will be packed into a `python27.zip`.
+Most of the python distribution is packed into `python27.zip`. If you
+experience any issues, please refer to our
+`user group <https://groups.google.com/forum/#!forum/kivy-users>`_ or the
+`kivy-ios project page <https://github.com/kivy/kivy-ios>`_.
 
 .. _Create an Xcode project:
 
 Create an Xcode project
 -----------------------
 
-Before doing the next step, ensure your application entry point is a file named
-`main.py`.
+Before proceeding to the next step, ensure your application entry point is a file
+named `main.py`.
 
-We provide a script that create an initial xcode project to start with (replace
-test with that you want. Must be a name without any space / weird chars)::
+We provide a script that creates an initial Xcode project to start with. In the
+command line below, replace `test` with your project name. It must be a
+name without any spaces or illegal characters::
 
-    $ tools/create-xcode-project.sh test /path/to/your/appdir
+    $ # ./toolchain.py create <title> <app_directory>
+    $ ./toolchain.py create Touchtracer ~/code/kivy/examples/demo/touchtracer
 
-Now you can open the Xcode project::
+.. Note::
+    You must use a fully qualified path to your application directory.
 
-    $ open app-test/test.xcodeproj
+A directory named `<title>-ios` will be created, with an Xcode project in it.
+You can open the Xcode project::
+
+    $ open touchtracer-ios/touchtracer.xcodeproj
+
+Then click on `Play`, and enjoy.
+
+.. Note::
+
+    Everytime you press `Play`, your application directory will be synced to
+    the `<title>-ios/YourApp` directory. Don't make changes in the -ios
+    directory directly.
+
+Updating an Xcode project
+-------------------------
+
+Let's say you want to add numpy to your project, but you didn't have it compiled
+prior the XCode project creation. First, ensure to build it::
+
+    $ ./toolchain.py build numpy
+
+Then, update your Xcode project::
+
+    $ ./toolchain.py update touchtracer-ios
+
+All the libraries / frameworks necessary to run all the compiled recipes will be
+added to your Xcode project.
 
 .. _Customize:
 
@@ -71,39 +109,38 @@ Customize
 
 You can customize the build in many ways:
 
-#. Minimize the `build/python/lib/python27.zip`: this contain all the python
-   modules. You can edit the zip file, and remove all the files you'll not use
+#. Minimize the `build/python/lib/python27.zip`: this contains all the python
+   modules. You can edit the zip file and remove all the files you'll not use
    (reduce encodings, remove xml, email...)
-#. Remove the .a not used: in Xcode, select your target, go in `Build Phases`,
-   then check the `Link Binary With Libraries`. You can remove the libraries
-   not used by your application.
 #. Change the icon, orientation, etc... According to the Apple policy :)
 #. Go to the settings panel > build, search for "strip" options, and
-   triple-check that they are all set to NO. Stripping is not working with
-   Python dynamic modules, and will strip needed symbols.
+   triple-check that they are all set to NO. Stripping does not work with
+   Python dynamic modules and will remove needed symbols.
+#. Indicate a launch image in portrait/landscape for iPad with and without
+   retina display.
+
+Launch Images are supported. By default, XCode want you to build an `Image Sets
+<https://developer.apple.com/library/ios/recipes/xcode_help-image_catalog-1.0/Recipe.html>`_.
+This is your responsibility to fill all the images needed for the Sets,
+depending of your target. However, Kivy use SDL, and as soon as the application
+starts the SDL main, the launch image will disappear. To prevent that, you need
+to have 2 files named `Default.png` and `Default-Landscape.png`, and put them
+in the `Resources` folder in Xcode (not in your application folder)
+
 
 .. _Known issues:
 
 Known issues
 ------------
 
-Currently, the project have few issues as (we'll fixes them during the
-development):
+Currently, the project has a few known issues (we'll fix these in future
+versions):
 
-- Loading time: Apple provide a way to reduce the feeling of a slow application
-  loading by showing an image when the application is initialize. But, due to
-  the SDL approach, IOS remove the launch image before we have started. So if
-  you are using a launch image, the user will see: The launch image -> black
-  screen -> your app. Remove the launch image for now.
-
-- Application configuration not writing: we are learning how IOS manage its
-  filesystem.
-
-- You can't export your project outside kivy-ios directory, because the
+- You can't export your project outside the kivy-ios directory because the
   libraries included in the project are relative to it.
 
-- Removing some libraries (like SDL_Mixer for the sound) is currently not
-  possible cause kivy project need it.
+- Removing some libraries (like SDL_Mixer for audio) is currently not
+  possible because the kivy project requires it.
 
 - And more, just too technical to be written here.
 
@@ -115,25 +152,28 @@ FAQ
 Application quit abnormally!
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default, all the print on the console and files are avoided. If you have an
-issue when running your application, you can activate the log by commenting the
-line in the main.m::
+By default, all the print statements to the console and files are ignored. If
+you have an issue when running your application, you can activate the log by
+commenting out this line in `main.m`::
 
     putenv("KIVY_NO_CONSOLELOG=1");
 
-Then, you should see all the Kivy log on the Xcode console.
+Then you should see all the Kivy logging on the Xcode console.
 
-How Apple can accept a python app ?
+How can Apple accept a python app ?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We managed to merge the app binary with all the libraries into only one binary,
-as libpython. At the end, all binaries modules are already loaded, nothing is
-dynamically loaded.
+We managed to merge the app binary with all the libraries into a single binary,
+called libpython. This means all binary modules are loaded beforehand, so
+nothing is dynamically loaded.
 
-Did you already submit a Kivy application to the App store ?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Have you already submited a Kivy application to the App store ?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Yes, check:
 
-- `Defletouch on iTunes <http://itunes.apple.com/us/app/deflectouch/id505729681>`_, 
+- `Defletouch on iTunes <http://itunes.apple.com/us/app/deflectouch/id505729681>`_,
 - `ProcessCraft on iTunes <http://itunes.apple.com/us/app/processcraft/id526377075>`_
+
+For a more complete list, visit the
+`Kivy wiki <https://github.com/kivy/kivy/wiki/List-of-Kivy-Projects>`_.

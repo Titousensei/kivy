@@ -1,6 +1,6 @@
 '''
-Support of WM_PEN message (Window platform)
-===========================================
+Support for WM_PEN messages (Windows platform)
+==============================================
 '''
 
 __all__ = ('WM_PenProvider', 'WM_Pen')
@@ -15,7 +15,7 @@ from kivy.input.motionevent import MotionEvent
 
 
 class WM_Pen(MotionEvent):
-    '''MotionEvent representing the WM_Pen event. Support pos profile'''
+    '''MotionEvent representing the WM_Pen event. Supports the pos profile.'''
 
     def depack(self, args):
         self.is_touch = True
@@ -32,9 +32,9 @@ if 'KIVY_DOC' in os.environ:
 else:
     from collections import deque
     from ctypes.wintypes import (ULONG, UINT, WPARAM, LPARAM,
-                                 HANDLE, BOOL, POINTER)
+                                 HANDLE, BOOL)
     from ctypes import (Structure, windll, byref, c_int16,
-                        c_int, WINFUNCTYPE)
+                        c_int, WINFUNCTYPE, POINTER)
     from kivy.input.provider import MotionEventProvider
     from kivy.input.factory import MotionEventFactory
 
@@ -54,11 +54,11 @@ else:
         h = property(lambda self: self.bottom - self.top)
     win_rect = RECT()
 
-    if hasattr(windll.user32, 'SetWindowLongPtrW'):
+    try:
         windll.user32.SetWindowLongPtrW.restype = WNDPROC
         windll.user32.SetWindowLongPtrW.argtypes = [HANDLE, c_int, WNDPROC]
         SetWindowLong_wrapper = windll.user32.SetWindowLongPtrW
-    else:
+    except AttributeError:
         windll.user32.SetWindowLongW.restype = WNDPROC
         windll.user32.SetWindowLongW.argtypes = [HANDLE, c_int, WNDPROC]
         SetWindowLong_wrapper = windll.user32.SetWindowLongW

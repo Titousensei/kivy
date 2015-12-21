@@ -7,10 +7,10 @@ Spinner
 .. image:: images/spinner.jpg
     :align: right
 
-Spinner is a widget that provide a quick way to select one value from a set. In
-the default state, a spinner show its currently selected value. Touching the
-spinner displays a dropdown menu with all other available values. from which the
-user can select a new one.
+Spinner is a widget that provides a quick way to select one value from a set.
+In the default state, a spinner shows its currently selected value.
+Touching the spinner displays a dropdown menu with all the other available
+values from which the user can select a new one.
 
 Example::
 
@@ -18,7 +18,7 @@ Example::
     from kivy.uix.spinner import Spinner
 
     spinner = Spinner(
-        # default value showed
+        # default value shown
         text='Home',
         # available values
         values=('Home', 'Work', 'Other', 'Custom'),
@@ -28,7 +28,7 @@ Example::
         pos_hint={'center_x': .5, 'center_y': .5})
 
     def show_selected_value(spinner, text):
-        print 'The spinner', spinner, 'have text', text
+        print('The spinner', spinner, 'have text', text)
 
     spinner.bind(text=show_selected_value)
 
@@ -38,67 +38,70 @@ Example::
 
 __all__ = ('Spinner', 'SpinnerOption')
 
+from kivy.compat import string_types
+from kivy.factory import Factory
 from kivy.properties import ListProperty, ObjectProperty, BooleanProperty
 from kivy.uix.button import Button
 from kivy.uix.dropdown import DropDown
-from kivy.lang import Builder
-
-
-Builder.load_string('''
-<SpinnerOption>:
-    size_hint_y: None
-    height: 44
-
-<Spinner>:
-    background_normal: 'atlas://data/images/defaulttheme/spinner'
-    background_down: 'atlas://data/images/defaulttheme/spinner_pressed'
-''')
 
 
 class SpinnerOption(Button):
-    '''Special button used in the dropdown list. We just set the default
-    size_hint_y and height.
+    '''Special button used in the :class:`Spinner` dropdown list. By default,
+    this is just a :class:`~kivy.uix.button.Button` with a size_hint_y of None
+    and a height of :meth:`48dp <kivy.metrics.dp>`.
     '''
     pass
 
 
 class Spinner(Button):
-    '''Spinner class, see module documentation for more information
+    '''Spinner class, see module documentation for more information.
     '''
 
     values = ListProperty()
     '''Values that can be selected by the user. It must be a list of strings.
 
-    :data:`values` is a :class:`~kivy.properties.ListProperty`, default to [].
+    :attr:`values` is a :class:`~kivy.properties.ListProperty` and defaults to
+    [].
     '''
 
     option_cls = ObjectProperty(SpinnerOption)
     '''Class used to display the options within the dropdown list displayed
-    under the Spinner. The `text` property in the class will represent the
-    value.
+    under the Spinner. The `text` property of the class will be used to
+    represent the value.
 
-    The option class require at least:
+    The option class requires:
 
-    - one `text` property where the value will be put
-    - one `on_release` event that you need to trigger when the option is
-      touched.
+    - a `text` property, used to display the value.
+    - an `on_release` event, used to trigger the option when pressed/touched.
+    - a :attr:`~kivy.uix.widget.Widget.size_hint_y` of None.
+    - the :attr:`~kivy.uix.widget.Widget.height` to be set.
 
-    :data:`option_cls` is a :class:`~kivy.properties.ObjectProperty`, default
-    to :class:`SpinnerOption`.
+    :attr:`option_cls` is an :class:`~kivy.properties.ObjectProperty` and
+    defaults to :class:`SpinnerOption`.
+
+    .. versionchanged:: 1.8.0
+        If you set a string, the :class:`~kivy.factory.Factory` will be used to
+        resolve the class.
+
     '''
 
     dropdown_cls = ObjectProperty(DropDown)
     '''Class used to display the dropdown list when the Spinner is pressed.
 
-    :data:`dropdown_cls` is a :class:`~kivy.properties.ObjectProperty`, default
-    to :class:`~kivy.uix.dropdown.DropDown`.
+    :attr:`dropdown_cls` is an :class:`~kivy.properties.ObjectProperty` and
+    defaults to :class:`~kivy.uix.dropdown.DropDown`.
+
+    .. versionchanged:: 1.8.0
+        If you set a string, the :class:`~kivy.factory.Factory` will be used to
+        resolve the class.
+
     '''
 
     is_open = BooleanProperty(False)
-    '''By default, the spinner is not open. Set to true to open it.
+    '''By default, the spinner is not open. Set to True to open it.
 
-    :data:`is_open` is a :class:`~kivy.properties.BooleanProperty`, default to
-    False.
+    :attr:`is_open` is a :class:`~kivy.properties.BooleanProperty` and
+    defaults to False.
 
     .. versionadded:: 1.4.0
     '''
@@ -106,25 +109,33 @@ class Spinner(Button):
     def __init__(self, **kwargs):
         self._dropdown = None
         super(Spinner, self).__init__(**kwargs)
-        self.bind(
-            on_release=self._toggle_dropdown,
-            dropdown_cls=self._build_dropdown,
-            option_cls=self._build_dropdown,
-            values=self._update_dropdown)
-        self._build_dropdown()
+        fbind = self.fbind
+        build_dropdown = self._build_dropdown
+        fbind('on_release', self._toggle_dropdown)
+        fbind('dropdown_cls', build_dropdown)
+        fbind('option_cls', build_dropdown)
+        fbind('values', self._update_dropdown)
+        build_dropdown()
 
     def _build_dropdown(self, *largs):
         if self._dropdown:
             self._dropdown.unbind(on_select=self._on_dropdown_select)
+            self._dropdown.unbind(on_dismiss=self._close_dropdown)
             self._dropdown.dismiss()
             self._dropdown = None
-        self._dropdown = self.dropdown_cls()
+        cls = self.dropdown_cls
+        if isinstance(cls, string_types):
+            cls = Factory.get(cls)
+        self._dropdown = cls()
         self._dropdown.bind(on_select=self._on_dropdown_select)
+        self._dropdown.bind(on_dismiss=self._close_dropdown)
         self._update_dropdown()
 
     def _update_dropdown(self, *largs):
         dp = self._dropdown
         cls = self.option_cls
+        if isinstance(cls, string_types):
+            cls = Factory.get(cls)
         dp.clear_widgets()
         for value in self.values:
             item = cls(text=value)
@@ -134,6 +145,9 @@ class Spinner(Button):
     def _toggle_dropdown(self, *largs):
         self.is_open = not self.is_open
 
+    def _close_dropdown(self, *largs):
+        self.is_open = False
+
     def _on_dropdown_select(self, instance, data, *largs):
         self.text = data
         self.is_open = False
@@ -142,5 +156,5 @@ class Spinner(Button):
         if value:
             self._dropdown.open(self)
         else:
-            self._dropdown.dismiss()
-
+            if self._dropdown.attach_to:
+                self._dropdown.dismiss()

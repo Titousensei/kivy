@@ -2,17 +2,24 @@
 Monitor module
 ==============
 
-Monitor module is a toolbar that show activity of your current application :
+The Monitor module is a toolbar that shows the activity of your current
+application :
 
 * FPS
-* Graph of input event
+* Graph of input events
+
+Usage
+-----
+
+For normal module usage, please see the :mod:`~kivy.modules` documentation.
 
 '''
+
+__all__ = ('start', 'stop')
 
 from kivy.uix.label import Label
 from kivy.graphics import Rectangle, Color
 from kivy.clock import Clock
-from kivy.input.postproc import kivy_postproc_modules
 from functools import partial
 
 _statsinput = 0
@@ -44,10 +51,10 @@ class StatsInput(object):
         return events
 
 
-kivy_postproc_modules['fps'] = StatsInput()
-
-
 def start(win, ctx):
+    # late import to avoid breaking module loading
+    from kivy.input.postproc import kivy_postproc_modules
+    kivy_postproc_modules['fps'] = StatsInput()
     global _ctx
     ctx.label = Label(text='FPS: 0.0')
     ctx.inputstats = 0
@@ -60,7 +67,7 @@ def start(win, ctx):
         ctx.color = Color(1, 1, 1)
         ctx.rectangle = Rectangle(pos=(5, win.height - 20))
         ctx.color = Color(1, 1, 1, .5)
-        for x in xrange(64):
+        for x in range(64):
             ctx.stats.append(0)
             ctx.statsr.append(
                 Rectangle(pos=(win.width - 64 * 4 + x * 4, win.height - 25),

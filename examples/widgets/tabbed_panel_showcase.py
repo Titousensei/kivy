@@ -20,8 +20,8 @@ class CloseableHeader(TabbedPanelHeader):
     pass
 
 
-Factory.register('StandingHeader', cls = StandingHeader)
-Factory.register('CloseableHeader', cls = CloseableHeader)
+Factory.register('StandingHeader', cls=StandingHeader)
+Factory.register('CloseableHeader', cls=CloseableHeader)
 
 from kivy.lang import Builder
 
@@ -35,6 +35,7 @@ Builder.load_string('''
 
 <StandingHeader>
     color: 0,0,0,0
+    disabled_color: self.color
     Scatter:
         do_translation: False
         do_scale: False
@@ -49,14 +50,16 @@ Builder.load_string('''
             id: lbl
             text: root.text
             size: root.size
+            color: 1, 1, 1, .5 if self.disabled else 1
             pos: 0,0
 
 <PanelLeft>
     size_hint: (.45, .45)
     pos_hint: {'center_x': .25, 'y': .55}
-    #replace the default tab with our custom tab
+    #replace the default tab with our custom tab class
     default_tab_cls: sh.__class__
-    default_tab_content: default_content
+    do_default_tab: True
+    default_tab_content: default_content.__self__
     tab_width: 40
     tab_height: 70
     FloatLayout:
@@ -76,7 +79,7 @@ Builder.load_string('''
             source: 'data/images/image-loading.gif'
     StandingHeader:
         id: sh
-        content: tab_2_content
+        content: tab_2_content.__self__
         text: 'tab 2'
     StandingHeader:
         content: tab_3_content
@@ -84,6 +87,7 @@ Builder.load_string('''
 
 <CloseableHeader>
     color: 0,0,0,0
+    disabled_color: self.color
     # variable tab_width
     text: 'tabx'
     size_hint_x: None
@@ -100,19 +104,18 @@ Builder.load_string('''
             size_hint: None, 1
             orientation: 'vertical'
             width: 22
-            Widget:
-            Button:
-                border: 0,0,0,0
-                background_normal: 'tools/theming/defaulttheme/close.png'
-                on_release: root.panel.remove_widget(root)
-            Widget:
+            Image:
+                source: 'tools/theming/defaulttheme/close.png'
+                on_touch_down:
+                    if self.collide_point(*args[1].pos) :\
+                        root.panel.remove_widget(root)
 
 
 <PanelRight>
     tab_pos: 'top_right'
     size_hint: (.45, .45)
     pos_hint: {'center_x': .75, 'y': .55}
-    #replace the default tab with our custom tab
+    # replace the default tab with our custom tab
     default_tab: def_tab
     #allow variable tab width
     tab_width: None
@@ -140,16 +143,16 @@ Builder.load_string('''
     CloseableHeader:
         id: def_tab
         text: 'default tab'
-        content:default_content
+        content:default_content.__self__
         panel: root
     CloseableHeader:
         text: 'tab2'
-        content: tab_2_content
+        content: tab_2_content.__self__
         panel: root
     CloseableHeader:
         id: tab3
         text: 'tab3'
-        content: tab_3_content
+        content: tab_3_content.__self__
         panel: root
     CloseableHeader:
         panel: root
@@ -170,29 +173,23 @@ Builder.load_string('''
     tab_pos: 'bottom_left'
     size_hint: (.45, .45)
     pos_hint: {'center_x': .25, 'y': .02}
-    default_tab_text: 'Settings'
-    default_tab_content: default_content
-    FloatLayout:
+    do_default_tab: False
+
+    TabbedPanelItem:
+        id: settings
+        text: 'Settings'
         RstDocument:
-            id: default_content
             text: '\\n'.join(("Normal tabs", "-------------",\
-                "Tabs in \\'%s\\' position" %root.tab_pos))
-        Image:
-            id: tab_2_content
-            pos: self.parent.pos
-            size: self.parent.size
-            source: 'data/images/defaulttheme-0.png'
-        Image:
-            id: tab_3_content
-            pos:self.parent.pos
-            size: self.parent.size
-            source: 'data/images/image-loading.gif'
-    TabbedPanelHeader:
+            "Tabs in \\'%s\\' position" %root.tab_pos))
+    TabbedPanelItem:
         text: 'tab2'
-        content: tab_2_content
-    TabbedPanelHeader:
+        BubbleButton:
+            text: 'switch to settings'
+            on_press: root.switch_to(settings)
+    TabbedPanelItem:
         text: 'tab3'
-        content: tab_3_content
+        Image:
+            source: 'data/images/image-loading.gif'
 
 <PanelbRight>
     tab_pos: 'right_top'
@@ -215,16 +212,16 @@ Builder.load_string('''
             id: tab_3_content
             pos:self.parent.pos
             size: self.parent.size
-            source: 'softboy.avi'
+            source: 'softboy.mpg'
     TabbedPanelHeader:
         id: def_tab
-        content:default_content
+        content:default_content.__self__
         border: 0, 0, 0, 0
         background_down: 'softboy.png'
         background_normal:'sequenced_images/data/images/info.png'
     TabbedPanelHeader:
         id: tph
-        content: tab_2_content
+        content: tab_2_content.__self__
         BoxLayout:
             pos: tph.pos
             size: tph.size
@@ -236,7 +233,7 @@ Builder.load_string('''
                 text: 'text & img'
     TabbedPanelHeader:
         id: my_header
-        content: tab_3_content
+        content: tab_3_content.__self__
         Scatter:
             do_translation: False
             do_scale: False
@@ -257,26 +254,23 @@ Builder.load_string('''
 
 
 class Tp(TabbedPanel):
+
     #override tab switching method to animate on tab switch
     def switch_to(self, header):
-        anim = Animation(color=(1, 1, 1, 0), d =.24, t = 'in_out_quad')
+        anim = Animation(opacity=0, d=.24, t='in_out_quad')
 
         def start_anim(_anim, child, in_complete, *lt):
-            if hasattr(child, 'color'):
-                _anim.start(child)
-            elif not in_complete:
-                _on_complete()
+            _anim.start(child)
 
         def _on_complete(*lt):
-            if hasattr(header.content, 'color'):
-                header.content.color = (0, 0, 0, 0)
-                anim = Animation(color =
-                    (1, 1, 1, 1), d =.23, t = 'in_out_quad')
+            if header.content:
+                header.content.opacity = 0
+                anim = Animation(opacity=1, d=.43, t='in_out_quad')
                 start_anim(anim, header.content, True)
             super(Tp, self).switch_to(header)
 
-        anim.bind(on_complete = _on_complete)
-        if self.content:
+        anim.bind(on_complete=_on_complete)
+        if self.current_tab.content:
             start_anim(anim, self.current_tab.content, False)
         else:
             _on_complete()
@@ -289,7 +283,7 @@ class PanelLeft(Tp):
 class PanelRight(Tp):
 
     def add_header(self):
-        self.add_widget(CloseableHeader(panel = self))
+        self.add_widget(CloseableHeader(panel=self))
 
 
 class PanelbLeft(Tp):
@@ -321,7 +315,7 @@ class TabShowcase(FloatLayout):
             index = values.index(self.tab.tab_pos)
             self.tab.tab_pos = self.tab1.tab_pos = self.tab2.tab_pos\
                 = self.tab3.tab_pos = values[(index + 1) % len(values)]
-            self.but.text = 'Tabs in \'%s\' position,' %self.tab.tab_pos\
+            self.but.text = 'Tabs in \'%s\' position,' % self.tab.tab_pos\
                 + '\n press to change to next pos'
 
 
